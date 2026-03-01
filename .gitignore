@@ -1,0 +1,58 @@
+.DS_Store
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.pnp.*
+.cache/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+ENV/
+env/
+.venv/
+
+# Python build
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.iml
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.*
+
+# Coverage
+.coverage
+htmlcov/
+.cache
+
+# Swap, temp
+*.swp
+*.swo
+
+# Databases
+*.db
+*.sqlite3
+
+# Misc
+Thumbs.db
+DS_Store?
+提示词.txt
