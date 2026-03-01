@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MedImg Client</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="titlebar">
+        <div class="drag-region"></div>
+        <div class="tabs" id="tabsContainer"></div>
+        <div class="window-controls" id="windowControls">
+          <button id="btnMin" title="最小化">—</button>
+          <button id="btnMax" title="最大化">▢</button>
+          <button id="btnClose" title="关闭">✕</button>
+        </div>
+      </header>
+
+      <main class="content" id="contentArea">
+        <section class="home-view" id="homeView">
+          <div class="home-card">
+            <h1>欢迎使用</h1>
+            <p id="cliStatusText">正在启动中...</p>
+            <div class="home-actions">
+              <button id="btnStart" disabled>正在启动中</button>
+              <button id="btnSettings">设置</button>
+            </div>
+          </div>
+        </section>
+        <section class="tab-pages" id="tabPages"></section>
+      </main>
+    </div>
+
+    <div class="modal-backdrop hidden" id="settingsModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-label="设置">
+        <div class="modal-header">
+          <h2>设置</h2>
+          <button id="closeSettings">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="setting-group">
+            <label>前端 CLI 程序路径</label>
+            <input type="text" id="frontendCliPath" placeholder="例如: /path/to/frontend-cli" />
+          </div>
+          <div class="setting-group">
+            <label>前端 CLI 程序参数</label>
+            <input type="text" id="frontendCliArgs" placeholder="例如: --port 8080" />
+          </div>
+
+          <div class="setting-group">
+            <label>后端 CLI 程序路径</label>
+            <input type="text" id="backendCliPath" placeholder="例如: /path/to/backend-cli" />
+          </div>
+          <div class="setting-group">
+            <label>后端 CLI 程序参数</label>
+            <input type="text" id="backendCliArgs" placeholder="例如: --env prod" />
+          </div>
+
+          <div class="setting-group checkbox-group">
+            <label>
+              <input type="checkbox" id="enableGuard" />
+              启用守护功能（进程异常退出后自动重启）
+            </label>
+          </div>
+
+          <div class="setting-group">
+            <label>新建标签页默认地址</label>
+            <input type="text" id="newTabDefaultUrl" placeholder="https://example.com" />
+          </div>
+
+          <div class="setting-group">
+            <label>“开始使用”打开链接</label>
+            <input type="text" id="startButtonUrl" placeholder="https://example.com" />
+          </div>
+
+          <div class="logs-wrap">
+            <div>
+              <h3>前端 CLI 输出</h3>
+              <textarea id="frontendLogs" readonly></textarea>
+            </div>
+            <div>
+              <h3>后端 CLI 输出</h3>
+              <textarea id="backendLogs" readonly></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button id="saveSettings">保存设置</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="renderer.js"></script>
+  </body>
+  </html>
