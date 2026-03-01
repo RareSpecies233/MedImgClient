@@ -17,10 +17,32 @@ const DEFAULT_SETTINGS = {
 };
 
 let mainWindow = null;
+let appShuttingDown = false;
+let quitSequenceStarted = false;
 
 const processState = {
-  frontend: { process: null, running: false, logs: [] },
-  backend: { process: null, running: false, logs: [] }
+  frontend: {
+    process: null,
+    running: false,
+    logs: [],
+    status: 'stopped',
+    commandKey: '',
+    stopRequested: false,
+    restartTimer: null,
+    stopPromise: null,
+    resolveStop: null
+  },
+  backend: {
+    process: null,
+    running: false,
+    logs: [],
+    status: 'stopped',
+    commandKey: '',
+    stopRequested: false,
+    restartTimer: null,
+    stopPromise: null,
+    resolveStop: null
+  }
 };
 
 function getSettingsPath() {
@@ -73,35 +95,98 @@ function notifyCliState() {
   }
 }
 
-function stopProcess(target, reason = '收到停止指令') {
-  const current = processState[target].process;
-  if (current && !current.killed) {
-    appendLog(target, `${reason}，发送 SIGTERM...`);
-    try {
-      current.kill('SIGTERM');
-      setTimeout(() => {
-        if (processState[target].process === current && !current.killed) {
-          appendLog(target, '进程未在超时时间内退出，发送 SIGKILL。');
-          try {
-            current.kill('SIGKILL');
-          } catch (_error) {}
-        }
-      }, 5000);
-    } catch (_error) {}
+function makeCommandKey(cliPath = '', argsText = '') {
+  return `${cliPath}__ARGS__${argsText}`;
+}
+
+function clearRestartTimer(target) {
+  const state = processState[target];
+  if (state.restartTimer) {
+    clearTimeout(state.restartTimer);
+    state.restartTimer = null;
   }
 }
 
-function spawnCli(target, cliPath, argsText, enableGuard) {
+function isServiceEnabled(target, settings) {
+  if (!settings.autoStartServices) return false;
+  if (target === 'backend') return !!settings.enableBackendService;
+  return !!settings.enableBackendService && !!settings.enableFrontendService;
+}
+
+function stopProcess(target, reason = '收到停止指令') {
+  const state = processState[target];
+  clearRestartTimer(target);
+  state.stopRequested = true;
+
+  if (state.stopPromise) {
+    return state.stopPromise;
+  }
+
+  const current = state.process;
+  if (!current) {
+    state.running = false;
+    state.status = 'stopped';
+    state.commandKey = '';
+    notifyCliState();
+    return Promise.resolve();
+  }
+
+  state.status = 'stopping';
+  state.stopPromise = new Promise((resolve) => {
+    state.resolveStop = resolve;
+  });
+
+  appendLog(target, `${reason}，发送 SIGTERM...`);
+
+  try {
+    current.kill('SIGTERM');
+  } catch (_error) {
+    if (state.resolveStop) {
+      state.resolveStop();
+      state.resolveStop = null;
+    }
+    state.stopPromise = null;
+    state.running = false;
+    state.status = 'stopped';
+    state.process = null;
+    state.commandKey = '';
+    notifyCliState();
+    return Promise.resolve();
+  }
+
+  setTimeout(() => {
+    if (state.process === current && !current.killed) {
+      appendLog(target, '进程未在超时时间内退出，发送 SIGKILL。');
+      try {
+        current.kill('SIGKILL');
+      } catch (_error) {}
+    }
+  }, 5000);
+
+  return state.stopPromise;
+}
+
+async function spawnCli(target, cliPath, argsText, enableGuard) {
+  const state = processState[target];
+
   if (!cliPath) {
-    processState[target].running = false;
-    processState[target].process = null;
+    state.running = false;
+    state.process = null;
+    state.status = 'stopped';
+    state.commandKey = '';
     appendLog(target, '未配置路径，未启动。');
     notifyCliState();
     return;
   }
 
-  if (processState[target].running && processState[target].process) {
-    stopProcess(target, '准备重启进程');
+  const commandKey = makeCommandKey(cliPath, argsText);
+  if (state.process && state.running && state.commandKey === commandKey) {
+    appendLog(target, '进程已在运行，跳过重复启动。');
+    return;
+  }
+
+  if (state.process) {
+    await stopProcess(target, '准备重启进程');
   }
 
   const args = parseArgs(argsText);
@@ -112,8 +197,12 @@ function spawnCli(target, cliPath, argsText, enableGuard) {
     shell: true
   });
 
-  processState[target].process = child;
-  processState[target].running = true;
+  state.process = child;
+  state.running = true;
+  state.status = 'running';
+  state.commandKey = commandKey;
+  state.stopRequested = false;
+  clearRestartTimer(target);
   notifyCliState();
 
   child.stdout.on('data', (chunk) => {
@@ -125,22 +214,46 @@ function spawnCli(target, cliPath, argsText, enableGuard) {
   });
 
   child.on('error', (error) => {
-    processState[target].running = false;
+    state.running = false;
+    state.status = 'stopped';
+    state.process = null;
+    state.commandKey = '';
     appendLog(target, `启动失败：${error.message}`);
+
+    if (state.resolveStop) {
+      state.resolveStop();
+      state.resolveStop = null;
+    }
+    state.stopPromise = null;
+
     notifyCliState();
   });
 
   child.on('exit', (code, signal) => {
-    processState[target].running = false;
-    processState[target].process = null;
+    const wasStopRequested = state.stopRequested;
+    state.running = false;
+    state.process = null;
+    state.status = 'stopped';
+    state.commandKey = '';
+    state.stopRequested = false;
     appendLog(target, `进程退出 code=${code} signal=${signal || 'none'}`);
+
+    if (state.resolveStop) {
+      state.resolveStop();
+      state.resolveStop = null;
+    }
+    state.stopPromise = null;
+
     notifyCliState();
 
     const latestSettings = readSettings();
-    if (latestSettings.enableGuard && enableGuard) {
+    if (!appShuttingDown && !wasStopRequested && latestSettings.enableGuard && enableGuard && isServiceEnabled(target, latestSettings)) {
       appendLog(target, '守护功能启用，2秒后自动重启。');
-      setTimeout(() => {
+      state.restartTimer = setTimeout(() => {
+        state.restartTimer = null;
+        if (appShuttingDown) return;
         const fresh = readSettings();
+        if (!isServiceEnabled(target, fresh)) return;
         const p = target === 'frontend' ? fresh.frontendCliPath : fresh.backendCliPath;
         const a = target === 'frontend' ? fresh.frontendCliArgs : fresh.backendCliArgs;
         if (fresh.enableGuard) {
@@ -151,31 +264,32 @@ function spawnCli(target, cliPath, argsText, enableGuard) {
   });
 }
 
-function applyCliBySettings(settings) {
+async function applyCliBySettings(settings) {
   const normalizedSettings = {
     ...settings,
     enableFrontendService: settings.enableBackendService ? settings.enableFrontendService : false
   };
 
   if (!normalizedSettings.autoStartServices) {
-    stopProcess('frontend', '自动启动关闭，停止前端服务');
-    stopProcess('backend', '自动启动关闭，停止后端服务');
+    await stopProcess('frontend', '自动启动关闭，停止前端服务');
+    await stopProcess('backend', '自动启动关闭，停止后端服务');
     appendLog('frontend', '已关闭“启动时自动启动服务”，未自动启动。');
     appendLog('backend', '已关闭“启动时自动启动服务”，未自动启动。');
+    notifyCliState();
     return;
   }
 
   if (normalizedSettings.enableBackendService) {
-    spawnCli('backend', normalizedSettings.backendCliPath, normalizedSettings.backendCliArgs, normalizedSettings.enableGuard);
+    await spawnCli('backend', normalizedSettings.backendCliPath, normalizedSettings.backendCliArgs, normalizedSettings.enableGuard);
   } else {
-    stopProcess('backend', '后端服务已关闭，停止后端服务');
+    await stopProcess('backend', '后端服务已关闭，停止后端服务');
     appendLog('backend', '后端服务已关闭。');
   }
 
   if (normalizedSettings.enableFrontendService) {
-    spawnCli('frontend', normalizedSettings.frontendCliPath, normalizedSettings.frontendCliArgs, normalizedSettings.enableGuard);
+    await spawnCli('frontend', normalizedSettings.frontendCliPath, normalizedSettings.frontendCliArgs, normalizedSettings.enableGuard);
   } else {
-    stopProcess('frontend', '前端服务已关闭，停止前端服务');
+    await stopProcess('frontend', '前端服务已关闭，停止前端服务');
     appendLog('frontend', '前端服务已关闭。');
   }
 
@@ -241,9 +355,24 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('before-quit', () => {
-  stopProcess('frontend', '应用退出，停止前端服务');
-  stopProcess('backend', '应用退出，停止后端服务');
+app.on('before-quit', (event) => {
+  if (!appShuttingDown) {
+    appShuttingDown = true;
+  }
+
+  if (quitSequenceStarted) {
+    return;
+  }
+
+  event.preventDefault();
+  quitSequenceStarted = true;
+
+  Promise.all([
+    stopProcess('frontend', '应用退出，停止前端服务'),
+    stopProcess('backend', '应用退出，停止后端服务')
+  ]).finally(() => {
+    app.exit(0);
+  });
 });
 
 ipcMain.handle('settings:get', () => {
@@ -264,13 +393,13 @@ ipcMain.handle('settings:get', () => {
   };
 });
 
-ipcMain.handle('settings:save', (_event, payload) => {
+ipcMain.handle('settings:save', async (_event, payload) => {
   const normalizedPayload = {
     ...payload,
     enableFrontendService: payload.enableBackendService ? payload.enableFrontendService : false
   };
   const saved = writeSettings(normalizedPayload);
-  applyCliBySettings(saved);
+  await applyCliBySettings(saved);
   return { ok: true, settings: saved };
 });
 
