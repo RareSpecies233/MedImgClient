@@ -41,6 +41,12 @@
         </div>
 
         <div class="modal-body">
+          <div class="setting-group checkbox-group">
+            <label>
+              <input type="checkbox" id="enableFrontendService" />
+              启用前端服务
+            </label>
+          </div>
           <div class="setting-group">
             <label>前端 CLI 程序路径</label>
             <input type="text" id="frontendCliPath" placeholder="例如: /path/to/frontend-cli" />
@@ -50,6 +56,12 @@
             <input type="text" id="frontendCliArgs" placeholder="例如: --port 8080" />
           </div>
 
+          <div class="setting-group checkbox-group">
+            <label>
+              <input type="checkbox" id="enableBackendService" />
+              启用后端服务
+            </label>
+          </div>
           <div class="setting-group">
             <label>后端 CLI 程序路径</label>
             <input type="text" id="backendCliPath" placeholder="例如: /path/to/backend-cli" />
@@ -57,6 +69,13 @@
           <div class="setting-group">
             <label>后端 CLI 程序参数</label>
             <input type="text" id="backendCliArgs" placeholder="例如: --env prod" />
+          </div>
+
+          <div class="setting-group checkbox-group">
+            <label>
+              <input type="checkbox" id="autoStartServices" />
+              启动时自动启动服务
+            </label>
           </div>
 
           <div class="setting-group checkbox-group">

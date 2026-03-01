@@ -4,10 +4,13 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 
 const DEFAULT_SETTINGS = {
+  enableFrontendService: true,
   frontendCliPath: '',
   frontendCliArgs: '',
+  enableBackendService: true,
   backendCliPath: '',
   backendCliArgs: '',
+  autoStartServices: true,
   enableGuard: false,
   newTabDefaultUrl: 'https://www.example.com',
   startButtonUrl: 'https://www.example.com'
@@ -80,6 +83,7 @@ function killProcess(target) {
   }
   processState[target].process = null;
   processState[target].running = false;
+  notifyCliState();
 }
 
 function spawnCli(target, cliPath, argsText, enableGuard) {
@@ -139,9 +143,30 @@ function spawnCli(target, cliPath, argsText, enableGuard) {
   });
 }
 
-function restartCliBySettings(settings) {
-  spawnCli('frontend', settings.frontendCliPath, settings.frontendCliArgs, settings.enableGuard);
-  spawnCli('backend', settings.backendCliPath, settings.backendCliArgs, settings.enableGuard);
+function applyCliBySettings(settings) {
+  if (!settings.autoStartServices) {
+    killProcess('frontend');
+    killProcess('backend');
+    appendLog('frontend', '已关闭“启动时自动启动服务”，未自动启动。');
+    appendLog('backend', '已关闭“启动时自动启动服务”，未自动启动。');
+    return;
+  }
+
+  if (settings.enableFrontendService) {
+    spawnCli('frontend', settings.frontendCliPath, settings.frontendCliArgs, settings.enableGuard);
+  } else {
+    killProcess('frontend');
+    appendLog('frontend', '前端服务已关闭。');
+  }
+
+  if (settings.enableBackendService) {
+    spawnCli('backend', settings.backendCliPath, settings.backendCliArgs, settings.enableGuard);
+  } else {
+    killProcess('backend');
+    appendLog('backend', '后端服务已关闭。');
+  }
+
+  notifyCliState();
 }
 
 function createMainWindow() {
@@ -209,7 +234,7 @@ function createStartupWindow(url) {
 app.whenReady().then(() => {
   createMainWindow();
   const settings = readSettings();
-  restartCliBySettings(settings);
+  applyCliBySettings(settings);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -239,14 +264,17 @@ ipcMain.handle('settings:get', () => {
     },
     state: {
       frontendRunning: processState.frontend.running,
-      backendRunning: processState.backend.running
+      backendRunning: processState.backend.running,
+      enableFrontendService: !!settings.enableFrontendService,
+      enableBackendService: !!settings.enableBackendService,
+      autoStartServices: !!settings.autoStartServices
     }
   };
 });
 
 ipcMain.handle('settings:save', (_event, payload) => {
   const saved = writeSettings(payload);
-  restartCliBySettings(saved);
+  applyCliBySettings(saved);
   return { ok: true, settings: saved };
 });
 

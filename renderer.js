@@ -10,10 +10,13 @@ const settingsModal = document.getElementById('settingsModal');
 const closeSettings = document.getElementById('closeSettings');
 const saveSettings = document.getElementById('saveSettings');
 
+const enableFrontendService = document.getElementById('enableFrontendService');
 const frontendCliPath = document.getElementById('frontendCliPath');
 const frontendCliArgs = document.getElementById('frontendCliArgs');
+const enableBackendService = document.getElementById('enableBackendService');
 const backendCliPath = document.getElementById('backendCliPath');
 const backendCliArgs = document.getElementById('backendCliArgs');
+const autoStartServices = document.getElementById('autoStartServices');
 const enableGuard = document.getElementById('enableGuard');
 const newTabDefaultUrl = document.getElementById('newTabDefaultUrl');
 const startButtonUrl = document.getElementById('startButtonUrl');
@@ -25,10 +28,13 @@ const btnMax = document.getElementById('btnMax');
 const btnClose = document.getElementById('btnClose');
 
 let settings = {
+  enableFrontendService: true,
   frontendCliPath: '',
   frontendCliArgs: '',
+  enableBackendService: true,
   backendCliPath: '',
   backendCliArgs: '',
+  autoStartServices: true,
   enableGuard: false,
   newTabDefaultUrl: 'https://www.example.com',
   startButtonUrl: 'https://www.example.com'
@@ -49,12 +55,36 @@ let frontendRunning = false;
 let backendRunning = false;
 
 function updateStartButtonStatus() {
-  const ready = frontendRunning && backendRunning;
+  const needFrontend = !!settings.enableFrontendService;
+  const needBackend = !!settings.enableBackendService;
+  const frontendReady = !needFrontend || frontendRunning;
+  const backendReady = !needBackend || backendRunning;
+  const ready = frontendReady && backendReady;
+
   btnStart.disabled = !ready;
   btnStart.textContent = ready ? '开始使用' : '正在启动中';
-  cliStatusText.textContent = ready
-    ? '前后端 CLI 均已启动，可以开始使用。'
-    : '正在启动中，请等待前后端 CLI 就绪...';
+
+  if (ready) {
+    cliStatusText.textContent = '服务已就绪，可以开始使用。';
+    return;
+  }
+
+  if (!settings.autoStartServices) {
+    cliStatusText.textContent = '已关闭自动启动服务，请在设置中开启或手动启动后再使用。';
+    return;
+  }
+
+  if (!frontendReady && !backendReady) {
+    cliStatusText.textContent = '正在启动中，请等待前后端 CLI 就绪...';
+    return;
+  }
+
+  if (!frontendReady) {
+    cliStatusText.textContent = '正在启动中，请等待前端 CLI 就绪...';
+    return;
+  }
+
+  cliStatusText.textContent = '正在启动中，请等待后端 CLI 就绪...';
 }
 
 function createTabPage(tab) {
@@ -67,6 +97,16 @@ function createTabPage(tab) {
   webview.className = 'tab-webview';
   webview.setAttribute('src', tab.url);
   webview.setAttribute('allowpopups', 'true');
+  webview.addEventListener('page-title-updated', (event) => {
+    const nextTitle = (event.title || '').trim();
+    if (!nextTitle) return;
+    const target = tabs.find((item) => item.id === tab.id);
+    if (!target) return;
+    if (target.title !== nextTitle) {
+      target.title = nextTitle;
+      renderTabs();
+    }
+  });
   page.appendChild(webview);
   tabPages.appendChild(page);
 }
@@ -92,7 +132,7 @@ function switchTab(tabId) {
 
 function addNewTab() {
   const id = `tab-${Date.now()}-${tabCounter}`;
-  const title = `标签页${tabCounter}`;
+  const title = '新标签页';
   tabCounter += 1;
 
   const tab = {
@@ -159,10 +199,13 @@ function renderTabs() {
 }
 
 function fillSettingsForm() {
+  enableFrontendService.checked = !!settings.enableFrontendService;
   frontendCliPath.value = settings.frontendCliPath || '';
   frontendCliArgs.value = settings.frontendCliArgs || '';
+  enableBackendService.checked = !!settings.enableBackendService;
   backendCliPath.value = settings.backendCliPath || '';
   backendCliArgs.value = settings.backendCliArgs || '';
+  autoStartServices.checked = !!settings.autoStartServices;
   enableGuard.checked = !!settings.enableGuard;
   newTabDefaultUrl.value = settings.newTabDefaultUrl || '';
   startButtonUrl.value = settings.startButtonUrl || '';
@@ -170,10 +213,13 @@ function fillSettingsForm() {
 
 function collectSettingsForm() {
   return {
+    enableFrontendService: enableFrontendService.checked,
     frontendCliPath: frontendCliPath.value.trim(),
     frontendCliArgs: frontendCliArgs.value.trim(),
+    enableBackendService: enableBackendService.checked,
     backendCliPath: backendCliPath.value.trim(),
     backendCliArgs: backendCliArgs.value.trim(),
+    autoStartServices: autoStartServices.checked,
     enableGuard: enableGuard.checked,
     newTabDefaultUrl: newTabDefaultUrl.value.trim(),
     startButtonUrl: startButtonUrl.value.trim()
@@ -200,6 +246,10 @@ function hideSettingsModal() {
 }
 
 function setupWindowControls() {
+  if (window.appApi.platform === 'darwin') {
+    document.body.classList.add('platform-darwin');
+  }
+
   if (window.appApi.platform === 'win32' || window.appApi.platform === 'linux') {
     document.getElementById('windowControls').style.display = 'flex';
   }
@@ -239,6 +289,7 @@ async function bootstrap() {
     const payload = collectSettingsForm();
     const result = await window.appApi.saveSettings(payload);
     settings = result.settings;
+    updateStartButtonStatus();
     hideSettingsModal();
   });
 
