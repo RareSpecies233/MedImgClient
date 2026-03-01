@@ -130,7 +130,7 @@ function switchTab(tabId) {
   renderTabs();
 }
 
-function addNewTab() {
+function addNewTab(initialUrl) {
   const id = `tab-${Date.now()}-${tabCounter}`;
   const title = '新标签页';
   tabCounter += 1;
@@ -140,7 +140,7 @@ function addNewTab() {
     title,
     type: 'web',
     closable: true,
-    url: settings.newTabDefaultUrl || 'https://www.example.com'
+    url: initialUrl || settings.newTabDefaultUrl || 'https://www.example.com'
   };
 
   tabs.push(tab);
@@ -200,6 +200,7 @@ function renderTabs() {
 
 function fillSettingsForm() {
   enableFrontendService.checked = !!settings.enableFrontendService;
+  enableFrontendService.disabled = !settings.enableBackendService;
   frontendCliPath.value = settings.frontendCliPath || '';
   frontendCliArgs.value = settings.frontendCliArgs || '';
   enableBackendService.checked = !!settings.enableBackendService;
@@ -275,8 +276,17 @@ async function bootstrap() {
   updateStartButtonStatus();
 
   btnStart.addEventListener('click', async () => {
-    if (!frontendRunning || !backendRunning) return;
-    await window.appApi.openStartUrl();
+    if (btnStart.disabled) return;
+    addNewTab(settings.startButtonUrl || settings.newTabDefaultUrl || 'https://www.example.com');
+  });
+
+  enableBackendService.addEventListener('change', () => {
+    if (!enableBackendService.checked) {
+      enableFrontendService.checked = false;
+      enableFrontendService.disabled = true;
+      return;
+    }
+    enableFrontendService.disabled = false;
   });
 
   btnSettings.addEventListener('click', showSettingsModal);
@@ -287,8 +297,12 @@ async function bootstrap() {
 
   saveSettings.addEventListener('click', async () => {
     const payload = collectSettingsForm();
+    if (!payload.enableBackendService) {
+      payload.enableFrontendService = false;
+    }
     const result = await window.appApi.saveSettings(payload);
     settings = result.settings;
+    enableFrontendService.disabled = !settings.enableBackendService;
     updateStartButtonStatus();
     hideSettingsModal();
   });

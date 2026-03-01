@@ -17,7 +17,6 @@ const DEFAULT_SETTINGS = {
 };
 
 let mainWindow = null;
-let startupWindow = null;
 
 const processState = {
   frontend: { process: null, running: false, logs: [] },
@@ -74,27 +73,36 @@ function notifyCliState() {
   }
 }
 
-function killProcess(target) {
+function stopProcess(target, reason = '收到停止指令') {
   const current = processState[target].process;
   if (current && !current.killed) {
+    appendLog(target, `${reason}，发送 SIGTERM...`);
     try {
-      current.kill();
+      current.kill('SIGTERM');
+      setTimeout(() => {
+        if (processState[target].process === current && !current.killed) {
+          appendLog(target, '进程未在超时时间内退出，发送 SIGKILL。');
+          try {
+            current.kill('SIGKILL');
+          } catch (_error) {}
+        }
+      }, 5000);
     } catch (_error) {}
   }
-  processState[target].process = null;
-  processState[target].running = false;
-  notifyCliState();
 }
 
 function spawnCli(target, cliPath, argsText, enableGuard) {
   if (!cliPath) {
     processState[target].running = false;
+    processState[target].process = null;
     appendLog(target, '未配置路径，未启动。');
     notifyCliState();
     return;
   }
 
-  killProcess(target);
+  if (processState[target].running && processState[target].process) {
+    stopProcess(target, '准备重启进程');
+  }
 
   const args = parseArgs(argsText);
   appendLog(target, `启动命令：${cliPath} ${args.join(' ')}`.trim());
@@ -144,26 +152,31 @@ function spawnCli(target, cliPath, argsText, enableGuard) {
 }
 
 function applyCliBySettings(settings) {
-  if (!settings.autoStartServices) {
-    killProcess('frontend');
-    killProcess('backend');
+  const normalizedSettings = {
+    ...settings,
+    enableFrontendService: settings.enableBackendService ? settings.enableFrontendService : false
+  };
+
+  if (!normalizedSettings.autoStartServices) {
+    stopProcess('frontend', '自动启动关闭，停止前端服务');
+    stopProcess('backend', '自动启动关闭，停止后端服务');
     appendLog('frontend', '已关闭“启动时自动启动服务”，未自动启动。');
     appendLog('backend', '已关闭“启动时自动启动服务”，未自动启动。');
     return;
   }
 
-  if (settings.enableFrontendService) {
-    spawnCli('frontend', settings.frontendCliPath, settings.frontendCliArgs, settings.enableGuard);
+  if (normalizedSettings.enableBackendService) {
+    spawnCli('backend', normalizedSettings.backendCliPath, normalizedSettings.backendCliArgs, normalizedSettings.enableGuard);
   } else {
-    killProcess('frontend');
-    appendLog('frontend', '前端服务已关闭。');
+    stopProcess('backend', '后端服务已关闭，停止后端服务');
+    appendLog('backend', '后端服务已关闭。');
   }
 
-  if (settings.enableBackendService) {
-    spawnCli('backend', settings.backendCliPath, settings.backendCliArgs, settings.enableGuard);
+  if (normalizedSettings.enableFrontendService) {
+    spawnCli('frontend', normalizedSettings.frontendCliPath, normalizedSettings.frontendCliArgs, normalizedSettings.enableGuard);
   } else {
-    killProcess('backend');
-    appendLog('backend', '后端服务已关闭。');
+    stopProcess('frontend', '前端服务已关闭，停止前端服务');
+    appendLog('frontend', '前端服务已关闭。');
   }
 
   notifyCliState();
@@ -210,27 +223,6 @@ function createMainWindow() {
   });
 }
 
-function createStartupWindow(url) {
-  if (startupWindow && !startupWindow.isDestroyed()) {
-    startupWindow.focus();
-    return;
-  }
-
-  startupWindow = new BrowserWindow({
-    width: 1100,
-    height: 740,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false
-    }
-  });
-
-  startupWindow.loadURL(url || DEFAULT_SETTINGS.startButtonUrl);
-  startupWindow.on('closed', () => {
-    startupWindow = null;
-  });
-}
-
 app.whenReady().then(() => {
   createMainWindow();
   const settings = readSettings();
@@ -250,8 +242,8 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-  killProcess('frontend');
-  killProcess('backend');
+  stopProcess('frontend', '应用退出，停止前端服务');
+  stopProcess('backend', '应用退出，停止后端服务');
 });
 
 ipcMain.handle('settings:get', () => {
@@ -273,15 +265,13 @@ ipcMain.handle('settings:get', () => {
 });
 
 ipcMain.handle('settings:save', (_event, payload) => {
-  const saved = writeSettings(payload);
+  const normalizedPayload = {
+    ...payload,
+    enableFrontendService: payload.enableBackendService ? payload.enableFrontendService : false
+  };
+  const saved = writeSettings(normalizedPayload);
   applyCliBySettings(saved);
   return { ok: true, settings: saved };
-});
-
-ipcMain.handle('app:open-start-url', async () => {
-  const settings = readSettings();
-  createStartupWindow(settings.startButtonUrl);
-  return { ok: true };
 });
 
 ipcMain.handle('window:minimize', () => {
