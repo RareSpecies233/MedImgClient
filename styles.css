@@ -284,6 +284,33 @@ body.platform-darwin .tabs {
   gap: 8px;
 }
 
+.error-panel {
+  grid-column: span 2;
+  padding: 12px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fff7f7;
+}
+
+.error-summary {
+  color: #991b1b;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.error-panel textarea {
+  width: 100%;
+  min-height: 140px;
+  border: 1px solid #fecaca;
+  background: #ffffff;
+  color: #7f1d1d;
+  border-radius: 8px;
+  padding: 10px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 .checkbox-group {
   grid-column: span 2;
 }

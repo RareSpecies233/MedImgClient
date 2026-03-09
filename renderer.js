@@ -20,6 +20,9 @@ const autoStartServices = document.getElementById('autoStartServices');
 const enableGuard = document.getElementById('enableGuard');
 const newTabDefaultUrl = document.getElementById('newTabDefaultUrl');
 const startButtonUrl = document.getElementById('startButtonUrl');
+const serviceErrorPanel = document.getElementById('serviceErrorPanel');
+const serviceErrorSummary = document.getElementById('serviceErrorSummary');
+const serviceErrorDetails = document.getElementById('serviceErrorDetails');
 const frontendLogs = document.getElementById('frontendLogs');
 const backendLogs = document.getElementById('backendLogs');
 
@@ -53,38 +56,100 @@ let activeTabId = 'home';
 let tabCounter = 1;
 let frontendRunning = false;
 let backendRunning = false;
+let frontendStatus = 'stopped';
+let backendStatus = 'stopped';
+let manualStartInProgress = false;
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function clearServiceErrorView() {
+  serviceErrorPanel.classList.add('hidden');
+  serviceErrorSummary.textContent = '';
+  serviceErrorDetails.value = '';
+}
+
+function setServiceErrorView(errors) {
+  if (!errors || errors.length === 0) {
+    clearServiceErrorView();
+    return;
+  }
+
+  serviceErrorPanel.classList.remove('hidden');
+  serviceErrorSummary.textContent = errors.map((item) => {
+    const label = item.target === 'frontend' ? '前端服务' : item.target === 'backend' ? '后端服务' : '服务';
+    return `${label}：${item.summary}`;
+  }).join('\n');
+  serviceErrorDetails.value = errors.map((item) => {
+    const label = item.target === 'frontend' ? '前端服务' : item.target === 'backend' ? '后端服务' : '服务';
+    return `${label}\n${item.details || '无更多详细信息。'}`;
+  }).join('\n\n');
+}
+
+function syncErrorStateFromState(state) {
+  const errors = [state.backendError, state.frontendError].filter(Boolean);
+  if (errors.length > 0) {
+    setServiceErrorView(errors);
+    return;
+  }
+  clearServiceErrorView();
+}
+
+function getEffectiveServiceState() {
+  const backendEnabled = !!settings.enableBackendService;
+  const frontendEnabled = backendEnabled && !!settings.enableFrontendService;
+
+  return {
+    backendEnabled,
+    frontendEnabled,
+    backendReady: !backendEnabled || backendRunning,
+    frontendReady: !frontendEnabled || frontendRunning
+  };
+}
+
+function getServiceStatusText() {
+  const { backendEnabled, frontendEnabled, backendReady, frontendReady } = getEffectiveServiceState();
+  const statusPending = manualStartInProgress
+    || backendStatus === 'starting'
+    || frontendStatus === 'starting'
+    || backendStatus === 'stopping'
+    || frontendStatus === 'stopping';
+
+  if (statusPending) {
+    return '正在启动中';
+  }
+
+  if (backendReady && frontendReady && (backendEnabled || frontendEnabled)) {
+    if (backendEnabled && !frontendEnabled) {
+      return '仅启动后端服务';
+    }
+    return '服务已启动';
+  }
+
+  if (backendRunning && !frontendRunning) {
+    return '仅启动后端服务';
+  }
+
+  return '服务未启动';
+}
+
+function getStartTargetUrl() {
+  return settings.startButtonUrl || settings.newTabDefaultUrl || 'https://www.example.com';
+}
+
+function areRequiredServicesReady() {
+  const { backendEnabled, frontendEnabled, backendReady, frontendReady } = getEffectiveServiceState();
+  const anyServiceEnabled = backendEnabled || frontendEnabled;
+  return anyServiceEnabled && backendReady && frontendReady;
+}
 
 function updateStartButtonStatus() {
-  const needFrontend = !!settings.enableFrontendService;
-  const needBackend = !!settings.enableBackendService;
-  const frontendReady = !needFrontend || frontendRunning;
-  const backendReady = !needBackend || backendRunning;
-  const ready = frontendReady && backendReady;
+  const ready = areRequiredServicesReady();
 
-  btnStart.disabled = !ready;
-  btnStart.textContent = ready ? '开始使用' : '正在启动中';
-
-  if (ready) {
-    cliStatusText.textContent = '服务已就绪，可以开始使用。';
-    return;
-  }
-
-  if (!settings.autoStartServices) {
-    cliStatusText.textContent = '已关闭自动启动服务，请在设置中开启或手动启动后再使用。';
-    return;
-  }
-
-  if (!frontendReady && !backendReady) {
-    cliStatusText.textContent = '正在启动中，请等待前后端 CLI 就绪...';
-    return;
-  }
-
-  if (!frontendReady) {
-    cliStatusText.textContent = '正在启动中，请等待前端 CLI 就绪...';
-    return;
-  }
-
-  cliStatusText.textContent = '正在启动中，请等待后端 CLI 就绪...';
+  btnStart.disabled = manualStartInProgress;
+  btnStart.textContent = manualStartInProgress ? '正在启动中' : ready ? '开始使用' : '未启动服务';
+  cliStatusText.textContent = getServiceStatusText();
 }
 
 function createTabPage(tab) {
@@ -171,6 +236,16 @@ function renderTabs() {
     const tabEl = document.createElement('div');
     tabEl.className = `tab-item ${tab.id === activeTabId ? 'active' : ''}`;
     tabEl.addEventListener('click', () => switchTab(tab.id));
+    tabEl.addEventListener('mousedown', (event) => {
+      if (event.button === 1 && tab.closable) {
+        event.preventDefault();
+      }
+    });
+    tabEl.addEventListener('auxclick', (event) => {
+      if (event.button !== 1 || !tab.closable) return;
+      event.preventDefault();
+      closeTab(tab.id);
+    });
 
     const title = document.createElement('span');
     title.textContent = tab.title;
@@ -273,11 +348,62 @@ async function bootstrap() {
 
   frontendRunning = !!initial.state.frontendRunning;
   backendRunning = !!initial.state.backendRunning;
+  frontendStatus = initial.state.frontendStatus || 'stopped';
+  backendStatus = initial.state.backendStatus || 'stopped';
+  syncErrorStateFromState(initial.state);
   updateStartButtonStatus();
 
   btnStart.addEventListener('click', async () => {
-    if (btnStart.disabled) return;
-    addNewTab(settings.startButtonUrl || settings.newTabDefaultUrl || 'https://www.example.com');
+    if (areRequiredServicesReady()) {
+      addNewTab(getStartTargetUrl());
+      return;
+    }
+
+    const shouldStart = window.confirm('检测到服务未启动，是否现在启动服务并打开新标签页？');
+    if (!shouldStart) return;
+
+    manualStartInProgress = true;
+    clearServiceErrorView();
+    updateStartButtonStatus();
+
+    try {
+      const result = await window.appApi.startServices();
+      frontendRunning = !!result.state.frontendRunning;
+      backendRunning = !!result.state.backendRunning;
+      frontendStatus = result.state.frontendStatus || 'stopped';
+      backendStatus = result.state.backendStatus || 'stopped';
+      syncErrorStateFromState(result.state);
+
+      if (!result.ok) {
+        setServiceErrorView(result.errors || []);
+        showSettingsModal();
+        window.alert('启动服务失败，请查看设置界面的详细错误信息。');
+        return;
+      }
+
+      await delay(2000);
+
+      if (!areRequiredServicesReady()) {
+        showSettingsModal();
+        window.alert('服务未在预期时间内就绪，请查看设置界面的详细错误信息。');
+        return;
+      }
+
+      addNewTab(getStartTargetUrl());
+    } catch (error) {
+      window.alert(`启动服务失败：${error.message}`);
+      setServiceErrorView([
+        {
+          target: 'system',
+          summary: `启动服务失败：${error.message}`,
+          details: error.stack || error.message
+        }
+      ]);
+      showSettingsModal();
+    } finally {
+      manualStartInProgress = false;
+      updateStartButtonStatus();
+    }
   });
 
   enableBackendService.addEventListener('change', () => {
@@ -303,6 +429,7 @@ async function bootstrap() {
     const result = await window.appApi.saveSettings(payload);
     settings = result.settings;
     enableFrontendService.disabled = !settings.enableBackendService;
+    clearServiceErrorView();
     updateStartButtonStatus();
     hideSettingsModal();
   });
@@ -314,6 +441,9 @@ async function bootstrap() {
   window.appApi.onCliState((state) => {
     frontendRunning = !!state.frontendRunning;
     backendRunning = !!state.backendRunning;
+    frontendStatus = state.frontendStatus || 'stopped';
+    backendStatus = state.backendStatus || 'stopped';
+    syncErrorStateFromState(state);
     updateStartButtonStatus();
   });
 }

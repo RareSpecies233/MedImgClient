@@ -26,6 +26,7 @@ const processState = {
     running: false,
     logs: [],
     status: 'stopped',
+    lastError: null,
     commandKey: '',
     stopRequested: false,
     restartTimer: null,
@@ -37,6 +38,7 @@ const processState = {
     running: false,
     logs: [],
     status: 'stopped',
+    lastError: null,
     commandKey: '',
     stopRequested: false,
     restartTimer: null,
@@ -65,6 +67,31 @@ function appendLog(target, message) {
   }
 }
 
+function buildServiceError(target, summary, details) {
+  return {
+    target,
+    summary,
+    details: details || '无更多详细信息。',
+    timestamp: new Date().toISOString()
+  };
+}
+
+function setServiceError(target, summary, details) {
+  processState[target].lastError = buildServiceError(target, summary, details);
+}
+
+function clearServiceError(target) {
+  processState[target].lastError = null;
+}
+
+function getRecentLogs(target, count = 30) {
+  return processState[target].logs.slice(-count).join('\n');
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function readSettings() {
   const settingsPath = getSettingsPath();
   if (!fs.existsSync(settingsPath)) {
@@ -90,7 +117,11 @@ function notifyCliState() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('cli-state-updated', {
       frontendRunning: processState.frontend.running,
-      backendRunning: processState.backend.running
+      backendRunning: processState.backend.running,
+      frontendStatus: processState.frontend.status,
+      backendStatus: processState.backend.status,
+      frontendError: processState.frontend.lastError,
+      backendError: processState.backend.lastError
     });
   }
 }
@@ -174,6 +205,7 @@ async function spawnCli(target, cliPath, argsText, enableGuard) {
     state.process = null;
     state.status = 'stopped';
     state.commandKey = '';
+    setServiceError(target, '未配置可执行路径。', '请在设置中填写对应 CLI 程序路径后重试。');
     appendLog(target, '未配置路径，未启动。');
     notifyCliState();
     return;
@@ -190,6 +222,10 @@ async function spawnCli(target, cliPath, argsText, enableGuard) {
   }
 
   const args = parseArgs(argsText);
+  state.running = false;
+  state.status = 'starting';
+  clearServiceError(target);
+  notifyCliState();
   appendLog(target, `启动命令：${cliPath} ${args.join(' ')}`.trim());
 
   const child = spawn(cliPath, args, {
@@ -218,6 +254,7 @@ async function spawnCli(target, cliPath, argsText, enableGuard) {
     state.status = 'stopped';
     state.process = null;
     state.commandKey = '';
+    setServiceError(target, `启动失败：${error.message}`, getRecentLogs(target));
     appendLog(target, `启动失败：${error.message}`);
 
     if (state.resolveStop) {
@@ -243,6 +280,10 @@ async function spawnCli(target, cliPath, argsText, enableGuard) {
       state.resolveStop = null;
     }
     state.stopPromise = null;
+
+    if (!wasStopRequested) {
+      setServiceError(target, `进程已退出 code=${code} signal=${signal || 'none'}`, getRecentLogs(target));
+    }
 
     notifyCliState();
 
@@ -294,6 +335,54 @@ async function applyCliBySettings(settings) {
   }
 
   notifyCliState();
+}
+
+async function startServicesBySettings(settings) {
+  const normalizedSettings = {
+    ...settings,
+    enableFrontendService: settings.enableBackendService ? settings.enableFrontendService : false
+  };
+
+  const errors = [];
+
+  if (!normalizedSettings.enableBackendService && !normalizedSettings.enableFrontendService) {
+    errors.push(buildServiceError(
+      'system',
+      '当前没有启用任何服务。',
+      '请在设置中至少启用后端服务；如果需要前端服务，请同时启用前端服务并填写正确的 CLI 路径与参数。'
+    ));
+    return { ok: false, errors };
+  }
+
+  if (normalizedSettings.enableBackendService) {
+    if (!processState.backend.running) {
+      await spawnCli('backend', normalizedSettings.backendCliPath, normalizedSettings.backendCliArgs, normalizedSettings.enableGuard);
+      await sleep(2000);
+    }
+
+    if (!processState.backend.running) {
+      errors.push(processState.backend.lastError || buildServiceError('backend', '后端服务启动失败。', getRecentLogs('backend')));
+    }
+  }
+
+  if (!errors.length && normalizedSettings.enableFrontendService) {
+    if (!processState.frontend.running) {
+      await spawnCli('frontend', normalizedSettings.frontendCliPath, normalizedSettings.frontendCliArgs, normalizedSettings.enableGuard);
+      await sleep(2000);
+    }
+
+    if (!processState.frontend.running) {
+      errors.push(processState.frontend.lastError || buildServiceError('frontend', '前端服务启动失败。', getRecentLogs('frontend')));
+    }
+  }
+
+  notifyCliState();
+
+  if (errors.length > 0) {
+    return { ok: false, errors };
+  }
+
+  return { ok: true, errors: [] };
 }
 
 function createMainWindow() {
@@ -386,6 +475,10 @@ ipcMain.handle('settings:get', () => {
     state: {
       frontendRunning: processState.frontend.running,
       backendRunning: processState.backend.running,
+      frontendStatus: processState.frontend.status,
+      backendStatus: processState.backend.status,
+      frontendError: processState.frontend.lastError,
+      backendError: processState.backend.lastError,
       enableFrontendService: !!settings.enableFrontendService,
       enableBackendService: !!settings.enableBackendService,
       autoStartServices: !!settings.autoStartServices
@@ -401,6 +494,23 @@ ipcMain.handle('settings:save', async (_event, payload) => {
   const saved = writeSettings(normalizedPayload);
   await applyCliBySettings(saved);
   return { ok: true, settings: saved };
+});
+
+ipcMain.handle('services:start', async () => {
+  const settings = readSettings();
+  const result = await startServicesBySettings(settings);
+  return {
+    ok: result.ok,
+    errors: result.errors,
+    state: {
+      frontendRunning: processState.frontend.running,
+      backendRunning: processState.backend.running,
+      frontendStatus: processState.frontend.status,
+      backendStatus: processState.backend.status,
+      frontendError: processState.frontend.lastError,
+      backendError: processState.backend.lastError
+    }
+  };
 });
 
 ipcMain.handle('window:minimize', () => {

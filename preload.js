@@ -7,6 +7,9 @@ contextBridge.exposeInMainWorld('appApi', {
   saveSettings(payload) {
     return ipcRenderer.invoke('settings:save', payload);
   },
+  startServices() {
+    return ipcRenderer.invoke('services:start');
+  },
   onCliLog(listener) {
     const wrapped = (_event, payload) => listener(payload);
     ipcRenderer.on('cli-log', wrapped);

@@ -95,6 +95,12 @@
             <input type="text" id="startButtonUrl" placeholder="https://example.com" />
           </div>
 
+          <div class="setting-group error-panel hidden" id="serviceErrorPanel">
+            <label>服务启动错误详情</label>
+            <div class="error-summary" id="serviceErrorSummary"></div>
+            <textarea id="serviceErrorDetails" readonly></textarea>
+          </div>
+
           <div class="logs-wrap">
             <div>
               <h3>前端 CLI 输出</h3>
