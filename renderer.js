@@ -454,12 +454,41 @@ async function bootstrap() {
     if (!payload.enableBackendService) {
       payload.enableFrontendService = false;
     }
-    const result = await window.appApi.saveSettings(payload);
-    settings = result.settings;
-    applySettingsToFormState();
-    clearServiceErrorView();
-    updateStartButtonStatus();
-    hideSettingsModal();
+
+    try {
+      const result = await window.appApi.saveSettings(payload);
+      settings = result.settings;
+      applySettingsToFormState();
+
+      if (result.state) {
+        frontendRunning = !!result.state.frontendRunning;
+        backendRunning = !!result.state.backendRunning;
+        frontendStatus = result.state.frontendStatus || 'stopped';
+        backendStatus = result.state.backendStatus || 'stopped';
+        syncErrorStateFromState(result.state);
+      }
+
+      if (!result.ok) {
+        setServiceErrorView(result.errors || []);
+        updateStartButtonStatus();
+        window.alert('保存设置成功，但服务启动失败，请查看当前弹窗中的详细错误信息。');
+        return;
+      }
+
+      clearServiceErrorView();
+      updateStartButtonStatus();
+      hideSettingsModal();
+    } catch (error) {
+      setServiceErrorView([
+        {
+          target: 'system',
+          summary: `保存设置失败：${error.message}`,
+          details: error.stack || error.message
+        }
+      ]);
+      updateStartButtonStatus();
+      window.alert(`保存设置失败：${error.message}`);
+    }
   });
 
   window.appApi.onCliLog(({ target, line }) => {

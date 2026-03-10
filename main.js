@@ -142,6 +142,17 @@ function notifyCliState() {
   }
 }
 
+function getCliStatePayload() {
+  return {
+    frontendRunning: processState.frontend.running,
+    backendRunning: processState.backend.running,
+    frontendStatus: processState.frontend.status,
+    backendStatus: processState.backend.status,
+    frontendError: processState.frontend.lastError,
+    backendError: processState.backend.lastError
+  };
+}
+
 function makeCommandKey(cliPath = '', argsText = '') {
   return `${cliPath}__ARGS__${argsText}`;
 }
@@ -402,6 +413,29 @@ async function startServicesBySettings(settings) {
   return { ok: true, errors: [] };
 }
 
+function collectSettingsApplyErrors(settings) {
+  const normalizedSettings = {
+    ...settings,
+    enableFrontendService: settings.enableBackendService ? settings.enableFrontendService : false
+  };
+
+  if (!normalizedSettings.autoStartServices) {
+    return [];
+  }
+
+  const errors = [];
+
+  if (normalizedSettings.enableBackendService && !processState.backend.running) {
+    errors.push(processState.backend.lastError || buildServiceError('backend', '后端服务启动失败。', getRecentLogs('backend')));
+  }
+
+  if (normalizedSettings.enableFrontendService && !processState.frontend.running) {
+    errors.push(processState.frontend.lastError || buildServiceError('frontend', '前端服务启动失败。', getRecentLogs('frontend')));
+  }
+
+  return errors;
+}
+
 function createMainWindow() {
   const windowOptions = {
     width: 1280,
@@ -474,9 +508,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  app.quit();
 });
 
 app.on('before-quit', (event) => {
@@ -508,12 +540,7 @@ ipcMain.handle('settings:get', () => {
       backend: [...processState.backend.logs]
     },
     state: {
-      frontendRunning: processState.frontend.running,
-      backendRunning: processState.backend.running,
-      frontendStatus: processState.frontend.status,
-      backendStatus: processState.backend.status,
-      frontendError: processState.frontend.lastError,
-      backendError: processState.backend.lastError,
+      ...getCliStatePayload(),
       enableFrontendService: !!settings.enableFrontendService,
       enableBackendService: !!settings.enableBackendService,
       autoStartServices: !!settings.autoStartServices
@@ -528,7 +555,13 @@ ipcMain.handle('settings:save', async (_event, payload) => {
   };
   const saved = writeSettings(normalizedPayload);
   await applyCliBySettings(saved);
-  return { ok: true, settings: saved };
+  const errors = collectSettingsApplyErrors(saved);
+  return {
+    ok: errors.length === 0,
+    settings: saved,
+    errors,
+    state: getCliStatePayload()
+  };
 });
 
 ipcMain.handle('services:start', async () => {
@@ -537,14 +570,7 @@ ipcMain.handle('services:start', async () => {
   return {
     ok: result.ok,
     errors: result.errors,
-    state: {
-      frontendRunning: processState.frontend.running,
-      backendRunning: processState.backend.running,
-      frontendStatus: processState.frontend.status,
-      backendStatus: processState.backend.status,
-      frontendError: processState.frontend.lastError,
-      backendError: processState.backend.lastError
-    }
+    state: getCliStatePayload()
   };
 });
 
