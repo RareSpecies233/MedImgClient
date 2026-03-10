@@ -12,8 +12,8 @@ const DEFAULT_SETTINGS = {
   backendCliArgs: '',
   autoStartServices: true,
   enableGuard: false,
-  newTabDefaultUrl: 'https://www.example.com',
-  startButtonUrl: 'https://www.example.com'
+  guardRestartDelaySeconds: 2,
+  newTabDefaultUrl: 'https://www.example.com'
 };
 
 let mainWindow = null;
@@ -92,6 +92,14 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function normalizeGuardRestartDelaySeconds(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_SETTINGS.guardRestartDelaySeconds;
+  }
+  return Math.max(0, Math.round(parsed));
+}
+
 function readSettings() {
   const settingsPath = getSettingsPath();
   if (!fs.existsSync(settingsPath)) {
@@ -100,7 +108,11 @@ function readSettings() {
   try {
     const raw = fs.readFileSync(settingsPath, 'utf-8');
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    return {
+      ...DEFAULT_SETTINGS,
+      ...parsed,
+      guardRestartDelaySeconds: normalizeGuardRestartDelaySeconds(parsed.guardRestartDelaySeconds)
+    };
   } catch (_error) {
     return { ...DEFAULT_SETTINGS };
   }
@@ -108,7 +120,11 @@ function readSettings() {
 
 function writeSettings(payload) {
   const settingsPath = getSettingsPath();
-  const merged = { ...DEFAULT_SETTINGS, ...payload };
+  const merged = {
+    ...DEFAULT_SETTINGS,
+    ...payload,
+    guardRestartDelaySeconds: normalizeGuardRestartDelaySeconds(payload.guardRestartDelaySeconds)
+  };
   fs.writeFileSync(settingsPath, JSON.stringify(merged, null, 2), 'utf-8');
   return merged;
 }
@@ -289,7 +305,8 @@ async function spawnCli(target, cliPath, argsText, enableGuard) {
 
     const latestSettings = readSettings();
     if (!appShuttingDown && !wasStopRequested && latestSettings.enableGuard && enableGuard && isServiceEnabled(target, latestSettings)) {
-      appendLog(target, '守护功能启用，2秒后自动重启。');
+      const restartDelaySeconds = normalizeGuardRestartDelaySeconds(latestSettings.guardRestartDelaySeconds);
+      appendLog(target, `守护功能启用，${restartDelaySeconds}秒后自动重启。`);
       state.restartTimer = setTimeout(() => {
         state.restartTimer = null;
         if (appShuttingDown) return;
@@ -300,7 +317,7 @@ async function spawnCli(target, cliPath, argsText, enableGuard) {
         if (fresh.enableGuard) {
           spawnCli(target, p, a, true);
         }
-      }, 2000);
+      }, restartDelaySeconds * 1000);
     }
   });
 }

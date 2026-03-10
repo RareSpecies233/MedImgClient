@@ -18,8 +18,8 @@ const backendCliPath = document.getElementById('backendCliPath');
 const backendCliArgs = document.getElementById('backendCliArgs');
 const autoStartServices = document.getElementById('autoStartServices');
 const enableGuard = document.getElementById('enableGuard');
+const guardRestartDelaySeconds = document.getElementById('guardRestartDelaySeconds');
 const newTabDefaultUrl = document.getElementById('newTabDefaultUrl');
-const startButtonUrl = document.getElementById('startButtonUrl');
 const serviceErrorPanel = document.getElementById('serviceErrorPanel');
 const serviceErrorSummary = document.getElementById('serviceErrorSummary');
 const serviceErrorDetails = document.getElementById('serviceErrorDetails');
@@ -39,8 +39,8 @@ let settings = {
   backendCliArgs: '',
   autoStartServices: true,
   enableGuard: false,
-  newTabDefaultUrl: 'https://www.example.com',
-  startButtonUrl: 'https://www.example.com'
+  guardRestartDelaySeconds: 2,
+  newTabDefaultUrl: 'https://www.example.com'
 };
 
 const tabs = [
@@ -62,6 +62,16 @@ let manualStartInProgress = false;
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function normalizeUrlCandidate(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function getConfiguredTabUrl(overrideUrl) {
+  return normalizeUrlCandidate(overrideUrl)
+    || normalizeUrlCandidate(settings.newTabDefaultUrl)
+    || 'https://www.example.com';
 }
 
 function applySettingsToFormState() {
@@ -139,10 +149,6 @@ function getServiceStatusText() {
   }
 
   return '服务未启动';
-}
-
-function getStartTargetUrl() {
-  return settings.startButtonUrl || settings.newTabDefaultUrl || 'https://www.example.com';
 }
 
 function areRequiredServicesReady() {
@@ -226,7 +232,7 @@ function addNewTab(initialUrl) {
     title,
     type: 'web',
     closable: true,
-    url: initialUrl || settings.newTabDefaultUrl || 'https://www.example.com'
+    url: getConfiguredTabUrl(initialUrl)
   };
 
   tabs.push(tab);
@@ -290,7 +296,7 @@ function renderTabs() {
   addBtn.className = 'tab-add';
   addBtn.textContent = '+';
   addBtn.title = '新建标签页';
-  addBtn.addEventListener('click', addNewTab);
+  addBtn.addEventListener('click', () => addNewTab());
   tabsContainer.appendChild(addBtn);
 }
 
@@ -304,8 +310,8 @@ function fillSettingsForm() {
   backendCliArgs.value = settings.backendCliArgs || '';
   autoStartServices.checked = !!settings.autoStartServices;
   enableGuard.checked = !!settings.enableGuard;
+  guardRestartDelaySeconds.value = String(settings.guardRestartDelaySeconds ?? 2);
   newTabDefaultUrl.value = settings.newTabDefaultUrl || '';
-  startButtonUrl.value = settings.startButtonUrl || '';
 }
 
 function collectSettingsForm() {
@@ -318,8 +324,8 @@ function collectSettingsForm() {
     backendCliArgs: backendCliArgs.value.trim(),
     autoStartServices: autoStartServices.checked,
     enableGuard: enableGuard.checked,
-    newTabDefaultUrl: newTabDefaultUrl.value.trim(),
-    startButtonUrl: startButtonUrl.value.trim()
+    guardRestartDelaySeconds: Number.parseInt(guardRestartDelaySeconds.value, 10),
+    newTabDefaultUrl: newTabDefaultUrl.value.trim()
   };
 }
 
@@ -377,7 +383,7 @@ async function bootstrap() {
 
   btnStart.addEventListener('click', async () => {
     if (areRequiredServicesReady()) {
-      addNewTab(getStartTargetUrl());
+      addNewTab();
       return;
     }
 
@@ -411,7 +417,7 @@ async function bootstrap() {
         return;
       }
 
-      addNewTab(getStartTargetUrl());
+      addNewTab();
     } catch (error) {
       window.alert(`启动服务失败：${error.message}`);
       setServiceErrorView([
