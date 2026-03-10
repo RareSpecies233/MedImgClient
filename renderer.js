@@ -64,6 +64,13 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function applySettingsToFormState() {
+  enableBackendService.checked = !!settings.enableBackendService;
+  enableFrontendService.checked = !!settings.enableFrontendService;
+  enableFrontendService.disabled = !settings.enableBackendService;
+  autoStartServices.checked = !!settings.autoStartServices;
+}
+
 function clearServiceErrorView() {
   serviceErrorPanel.classList.add('hidden');
   serviceErrorSummary.textContent = '';
@@ -150,6 +157,20 @@ function updateStartButtonStatus() {
   btnStart.disabled = manualStartInProgress;
   btnStart.textContent = manualStartInProgress ? '正在启动中' : ready ? '开始使用' : '未启动服务';
   cliStatusText.textContent = getServiceStatusText();
+}
+
+async function enableServicesFromPrompt() {
+  const nextSettings = {
+    ...settings,
+    enableBackendService: true,
+    enableFrontendService: true
+  };
+
+  const saved = await window.appApi.saveSettings(nextSettings);
+  settings = saved.settings;
+  applySettingsToFormState();
+
+  return window.appApi.startServices();
 }
 
 function createTabPage(tab) {
@@ -342,6 +363,7 @@ async function bootstrap() {
 
   const initial = await window.appApi.getSettings();
   settings = initial.settings;
+  applySettingsToFormState();
 
   frontendLogs.value = (initial.logs.frontend || []).join('\n');
   backendLogs.value = (initial.logs.backend || []).join('\n');
@@ -359,7 +381,7 @@ async function bootstrap() {
       return;
     }
 
-    const shouldStart = window.confirm('检测到服务未启动，是否现在启动服务并打开新标签页？');
+    const shouldStart = window.confirm('检测到服务未启动，是否现在启用前后端服务并打开新标签页？');
     if (!shouldStart) return;
 
     manualStartInProgress = true;
@@ -367,7 +389,7 @@ async function bootstrap() {
     updateStartButtonStatus();
 
     try {
-      const result = await window.appApi.startServices();
+      const result = await enableServicesFromPrompt();
       frontendRunning = !!result.state.frontendRunning;
       backendRunning = !!result.state.backendRunning;
       frontendStatus = result.state.frontendStatus || 'stopped';
@@ -428,7 +450,7 @@ async function bootstrap() {
     }
     const result = await window.appApi.saveSettings(payload);
     settings = result.settings;
-    enableFrontendService.disabled = !settings.enableBackendService;
+    applySettingsToFormState();
     clearServiceErrorView();
     updateStartButtonStatus();
     hideSettingsModal();

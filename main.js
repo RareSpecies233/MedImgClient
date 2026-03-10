@@ -426,10 +426,28 @@ function createMainWindow() {
   });
 }
 
-app.whenReady().then(() => {
-  createMainWindow();
+async function bootstrapServicesOnStartup() {
   const settings = readSettings();
-  applyCliBySettings(settings);
+
+  if (!settings.autoStartServices) {
+    notifyCliState();
+    return;
+  }
+
+  try {
+    await applyCliBySettings(settings);
+  } catch (error) {
+    setServiceError('backend', `自动启动失败：${error.message}`, error.stack || error.message);
+    setServiceError('frontend', `自动启动失败：${error.message}`, error.stack || error.message);
+    appendLog('backend', `自动启动失败：${error.message}`);
+    appendLog('frontend', `自动启动失败：${error.message}`);
+    notifyCliState();
+  }
+}
+
+app.whenReady().then(async () => {
+  createMainWindow();
+  await bootstrapServicesOnStartup();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
