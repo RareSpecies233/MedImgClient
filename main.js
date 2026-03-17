@@ -1,19 +1,23 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { spawn } = require('child_process');
+
+const MODEL_TYPES = ['no_prompt', 'pts', 'box', 'box+pts', 'sota'];
 
 const DEFAULT_SETTINGS = {
   enableFrontendService: true,
-  frontendCliPath: '',
-  frontendCliArgs: '',
   enableBackendService: true,
-  backendCliPath: '',
-  backendCliArgs: '',
   autoStartServices: true,
   enableGuard: false,
   guardRestartDelaySeconds: 2,
-  newTabDefaultUrl: 'https://www.example.com'
+  port: 3000,
+  apiPort: 3001,
+  onnxPath: '',
+  modelType: 'sota',
+  frontendExtraArgs: '',
+  backendExtraArgs: ''
 };
 
 let mainWindow = null;
@@ -49,6 +53,34 @@ const processState = {
 
 function getSettingsPath() {
   return path.join(app.getPath('userData'), 'settings.json');
+}
+
+function getProgramRoot() {
+  return app.isPackaged ? path.dirname(app.getPath('exe')) : __dirname;
+}
+
+function getServiceBinaryPath(target) {
+  const executableName = process.platform === 'win32'
+    ? target === 'frontend' ? 'ui.exe' : 'server.exe'
+    : target === 'frontend' ? 'ui' : 'server';
+  return path.join(getProgramRoot(), 'bin', executableName);
+}
+
+function getLocalNetworkIp() {
+  const interfaces = os.networkInterfaces();
+  for (const addresses of Object.values(interfaces)) {
+    if (!Array.isArray(addresses)) continue;
+    for (const address of addresses) {
+      if (address && address.family === 'IPv4' && !address.internal) {
+        return address.address;
+      }
+    }
+  }
+  return '';
+}
+
+function buildClientUrl(port, host = '127.0.0.1', pathname = '/client') {
+  return `http://${host}:${port}${pathname}`;
 }
 
 function parseArgs(argsText = '') {
@@ -100,45 +132,85 @@ function normalizeGuardRestartDelaySeconds(value) {
   return Math.max(0, Math.round(parsed));
 }
 
+function normalizePort(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65535) {
+    return fallback;
+  }
+  return parsed;
+}
+
+function normalizeModelType(value) {
+  return MODEL_TYPES.includes(value) ? value : DEFAULT_SETTINGS.modelType;
+}
+
+function normalizeSettings(payload = {}) {
+  const merged = {
+    ...DEFAULT_SETTINGS,
+    ...payload
+  };
+
+  const enableBackendService = !!merged.enableBackendService;
+
+  return {
+    ...merged,
+    enableFrontendService: enableBackendService ? !!merged.enableFrontendService : false,
+    enableBackendService,
+    autoStartServices: !!merged.autoStartServices,
+    enableGuard: !!merged.enableGuard,
+    guardRestartDelaySeconds: normalizeGuardRestartDelaySeconds(merged.guardRestartDelaySeconds),
+    port: normalizePort(merged.port, DEFAULT_SETTINGS.port),
+    apiPort: normalizePort(merged.apiPort, DEFAULT_SETTINGS.apiPort),
+    onnxPath: typeof merged.onnxPath === 'string' ? merged.onnxPath.trim() : '',
+    modelType: normalizeModelType(merged.modelType),
+    frontendExtraArgs: typeof merged.frontendExtraArgs === 'string' ? merged.frontendExtraArgs.trim() : '',
+    backendExtraArgs: typeof merged.backendExtraArgs === 'string' ? merged.backendExtraArgs.trim() : ''
+  };
+}
+
 function readSettings() {
   const settingsPath = getSettingsPath();
   if (!fs.existsSync(settingsPath)) {
-    return { ...DEFAULT_SETTINGS };
+    return normalizeSettings();
   }
   try {
     const raw = fs.readFileSync(settingsPath, 'utf-8');
-    const parsed = JSON.parse(raw);
-    return {
-      ...DEFAULT_SETTINGS,
-      ...parsed,
-      guardRestartDelaySeconds: normalizeGuardRestartDelaySeconds(parsed.guardRestartDelaySeconds)
-    };
+    return normalizeSettings(JSON.parse(raw));
   } catch (_error) {
-    return { ...DEFAULT_SETTINGS };
+    return normalizeSettings();
   }
 }
 
 function writeSettings(payload) {
   const settingsPath = getSettingsPath();
-  const merged = {
-    ...DEFAULT_SETTINGS,
-    ...payload,
-    guardRestartDelaySeconds: normalizeGuardRestartDelaySeconds(payload.guardRestartDelaySeconds)
+  const normalized = normalizeSettings(payload);
+  fs.writeFileSync(settingsPath, JSON.stringify(normalized, null, 2), 'utf-8');
+  return normalized;
+}
+
+function getMetaPayload(settings) {
+  const localNetworkIp = getLocalNetworkIp();
+  return {
+    fixedPaths: {
+      frontend: getServiceBinaryPath('frontend'),
+      backend: getServiceBinaryPath('backend')
+    },
+    urls: {
+      start: buildClientUrl(settings.port, '127.0.0.1', '/client'),
+      quickPreprocess: buildClientUrl(settings.port, 'localhost', '/client/temp/preprocess'),
+      quickAnalysis: buildClientUrl(settings.port, 'localhost', '/client/temp/analysis'),
+      quickReconstruction: buildClientUrl(settings.port, 'localhost', '/client/temp/reconstruction'),
+      quickConsult: buildClientUrl(settings.port, 'localhost', '/client/temp/consult'),
+      developerAbout: buildClientUrl(settings.port, 'localhost', '/client/about'),
+      lan: localNetworkIp ? `http://${localNetworkIp}:${settings.port}` : ''
+    },
+    localNetworkIp
   };
-  fs.writeFileSync(settingsPath, JSON.stringify(merged, null, 2), 'utf-8');
-  return merged;
 }
 
 function notifyCliState() {
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('cli-state-updated', {
-      frontendRunning: processState.frontend.running,
-      backendRunning: processState.backend.running,
-      frontendStatus: processState.frontend.status,
-      backendStatus: processState.backend.status,
-      frontendError: processState.frontend.lastError,
-      backendError: processState.backend.lastError
-    });
+    mainWindow.webContents.send('cli-state-updated', getCliStatePayload());
   }
 }
 
@@ -153,8 +225,13 @@ function getCliStatePayload() {
   };
 }
 
-function makeCommandKey(cliPath = '', argsText = '') {
-  return `${cliPath}__ARGS__${argsText}`;
+function makeCommandKey(cliPath = '', args = []) {
+  return `${cliPath}__ARGS__${args.join('\u0001')}`;
+}
+
+function formatCommand(cliPath, args) {
+  const quotedArgs = args.map((arg) => (/[\s"]/u.test(arg) ? `"${arg.replace(/"/g, '\\"')}"` : arg));
+  return [cliPath, ...quotedArgs].join(' ').trim();
 }
 
 function clearRestartTimer(target) {
@@ -166,9 +243,92 @@ function clearRestartTimer(target) {
 }
 
 function isServiceEnabled(target, settings) {
-  if (!settings.autoStartServices) return false;
   if (target === 'backend') return !!settings.enableBackendService;
   return !!settings.enableBackendService && !!settings.enableFrontendService;
+}
+
+function getServiceLaunchConfig(target, settings) {
+  if (target === 'frontend') {
+    return {
+      cliPath: getServiceBinaryPath('frontend'),
+      args: [
+        '--port',
+        String(settings.port),
+        '--apiport',
+        String(settings.apiPort),
+        ...parseArgs(settings.frontendExtraArgs)
+      ]
+    };
+  }
+
+  return {
+    cliPath: getServiceBinaryPath('backend'),
+    args: [
+      '--apiport',
+      String(settings.apiPort),
+      '--onnx',
+      settings.onnxPath,
+      '--model_type',
+      settings.modelType,
+      ...parseArgs(settings.backendExtraArgs)
+    ]
+  };
+}
+
+function collectSettingsValidationErrors(settings) {
+  const errors = [];
+  const frontendBinaryPath = getServiceBinaryPath('frontend');
+  const backendBinaryPath = getServiceBinaryPath('backend');
+
+  if (settings.enableBackendService && !fs.existsSync(backendBinaryPath)) {
+    errors.push(buildServiceError(
+      'backend',
+      '后端程序不存在。',
+      `固定路径应为：${backendBinaryPath}`
+    ));
+  }
+
+  if (settings.enableFrontendService && !fs.existsSync(frontendBinaryPath)) {
+    errors.push(buildServiceError(
+      'frontend',
+      '前端程序不存在。',
+      `固定路径应为：${frontendBinaryPath}`
+    ));
+  }
+
+  if (settings.enableBackendService && !settings.onnxPath) {
+    errors.push(buildServiceError(
+      'backend',
+      '未选择 ONNX 文件。',
+      '请在设置中选择一个 .onnx 模型文件。'
+    ));
+  }
+
+  if (settings.enableBackendService && settings.onnxPath && path.extname(settings.onnxPath).toLowerCase() !== '.onnx') {
+    errors.push(buildServiceError(
+      'backend',
+      'ONNX 文件格式不正确。',
+      '仅支持 .onnx 文件。'
+    ));
+  }
+
+  if (settings.enableBackendService && settings.onnxPath && !fs.existsSync(settings.onnxPath)) {
+    errors.push(buildServiceError(
+      'backend',
+      'ONNX 文件不存在。',
+      `当前路径不存在：${settings.onnxPath}`
+    ));
+  }
+
+  return errors;
+}
+
+function syncValidationErrors(validationErrors) {
+  const backendError = validationErrors.find((item) => item.target === 'backend') || null;
+  const frontendError = validationErrors.find((item) => item.target === 'frontend') || null;
+
+  processState.backend.lastError = backendError;
+  processState.frontend.lastError = frontendError;
 }
 
 function stopProcess(target, reason = '收到停止指令') {
@@ -224,21 +384,10 @@ function stopProcess(target, reason = '收到停止指令') {
   return state.stopPromise;
 }
 
-async function spawnCli(target, cliPath, argsText, enableGuard) {
+async function spawnCli(target, cliPath, args, enableGuard) {
   const state = processState[target];
+  const commandKey = makeCommandKey(cliPath, args);
 
-  if (!cliPath) {
-    state.running = false;
-    state.process = null;
-    state.status = 'stopped';
-    state.commandKey = '';
-    setServiceError(target, '未配置可执行路径。', '请在设置中填写对应 CLI 程序路径后重试。');
-    appendLog(target, '未配置路径，未启动。');
-    notifyCliState();
-    return;
-  }
-
-  const commandKey = makeCommandKey(cliPath, argsText);
   if (state.process && state.running && state.commandKey === commandKey) {
     appendLog(target, '进程已在运行，跳过重复启动。');
     return;
@@ -248,16 +397,15 @@ async function spawnCli(target, cliPath, argsText, enableGuard) {
     await stopProcess(target, '准备重启进程');
   }
 
-  const args = parseArgs(argsText);
   state.running = false;
   state.status = 'starting';
   clearServiceError(target);
   notifyCliState();
-  appendLog(target, `启动命令：${cliPath} ${args.join(' ')}`.trim());
+  appendLog(target, `启动命令：${formatCommand(cliPath, args)}`);
 
   const child = spawn(cliPath, args, {
     stdio: ['ignore', 'pipe', 'pipe'],
-    shell: true
+    shell: false
   });
 
   state.process = child;
@@ -323,10 +471,9 @@ async function spawnCli(target, cliPath, argsText, enableGuard) {
         if (appShuttingDown) return;
         const fresh = readSettings();
         if (!isServiceEnabled(target, fresh)) return;
-        const p = target === 'frontend' ? fresh.frontendCliPath : fresh.backendCliPath;
-        const a = target === 'frontend' ? fresh.frontendCliArgs : fresh.backendCliArgs;
+        const launchConfig = getServiceLaunchConfig(target, fresh);
         if (fresh.enableGuard) {
-          spawnCli(target, p, a, true);
+          spawnCli(target, launchConfig.cliPath, launchConfig.args, true);
         }
       }, restartDelaySeconds * 1000);
     }
@@ -334,71 +481,73 @@ async function spawnCli(target, cliPath, argsText, enableGuard) {
 }
 
 async function applyCliBySettings(settings) {
-  const normalizedSettings = {
-    ...settings,
-    enableFrontendService: settings.enableBackendService ? settings.enableFrontendService : false
-  };
+  const normalizedSettings = normalizeSettings(settings);
+  const validationErrors = collectSettingsValidationErrors(normalizedSettings);
+  syncValidationErrors(validationErrors);
 
   if (!normalizedSettings.autoStartServices) {
     await stopProcess('frontend', '自动启动关闭，停止前端服务');
     await stopProcess('backend', '自动启动关闭，停止后端服务');
-    appendLog('frontend', '已关闭“启动时自动启动服务”，未自动启动。');
-    appendLog('backend', '已关闭“启动时自动启动服务”，未自动启动。');
     notifyCliState();
-    return;
+    return [];
   }
 
-  if (normalizedSettings.enableBackendService) {
-    await spawnCli('backend', normalizedSettings.backendCliPath, normalizedSettings.backendCliArgs, normalizedSettings.enableGuard);
+  const backendBlocked = validationErrors.some((item) => item.target === 'backend');
+  const frontendBlocked = validationErrors.some((item) => item.target === 'frontend') || backendBlocked;
+
+  if (normalizedSettings.enableBackendService && !backendBlocked) {
+    const backendConfig = getServiceLaunchConfig('backend', normalizedSettings);
+    await spawnCli('backend', backendConfig.cliPath, backendConfig.args, normalizedSettings.enableGuard);
   } else {
-    await stopProcess('backend', '后端服务已关闭，停止后端服务');
-    appendLog('backend', '后端服务已关闭。');
+    await stopProcess('backend', '后端服务已关闭或配置无效，停止后端服务');
   }
 
-  if (normalizedSettings.enableFrontendService) {
-    await spawnCli('frontend', normalizedSettings.frontendCliPath, normalizedSettings.frontendCliArgs, normalizedSettings.enableGuard);
+  if (normalizedSettings.enableFrontendService && !frontendBlocked) {
+    const frontendConfig = getServiceLaunchConfig('frontend', normalizedSettings);
+    await spawnCli('frontend', frontendConfig.cliPath, frontendConfig.args, normalizedSettings.enableGuard);
   } else {
-    await stopProcess('frontend', '前端服务已关闭，停止前端服务');
-    appendLog('frontend', '前端服务已关闭。');
+    await stopProcess('frontend', '前端服务已关闭或配置无效，停止前端服务');
   }
 
   notifyCliState();
+  return validationErrors;
 }
 
 async function startServicesBySettings(settings) {
-  const normalizedSettings = {
-    ...settings,
-    enableFrontendService: settings.enableBackendService ? settings.enableFrontendService : false
-  };
+  const normalizedSettings = normalizeSettings(settings);
+  const validationErrors = collectSettingsValidationErrors(normalizedSettings);
+  syncValidationErrors(validationErrors);
+
+  if (!normalizedSettings.enableBackendService && !normalizedSettings.enableFrontendService) {
+    return {
+      ok: false,
+      errors: [buildServiceError('system', '当前没有启用任何服务。', '请至少启用后端服务。')]
+    };
+  }
+
+  if (validationErrors.length > 0) {
+    notifyCliState();
+    return {
+      ok: false,
+      errors: validationErrors
+    };
+  }
 
   const errors = [];
 
-  if (!normalizedSettings.enableBackendService && !normalizedSettings.enableFrontendService) {
-    errors.push(buildServiceError(
-      'system',
-      '当前没有启用任何服务。',
-      '请在设置中至少启用后端服务；如果需要前端服务，请同时启用前端服务并填写正确的 CLI 路径与参数。'
-    ));
-    return { ok: false, errors };
-  }
-
-  if (normalizedSettings.enableBackendService) {
-    if (!processState.backend.running) {
-      await spawnCli('backend', normalizedSettings.backendCliPath, normalizedSettings.backendCliArgs, normalizedSettings.enableGuard);
-      await sleep(2000);
-    }
-
+  if (normalizedSettings.enableBackendService && !processState.backend.running) {
+    const backendConfig = getServiceLaunchConfig('backend', normalizedSettings);
+    await spawnCli('backend', backendConfig.cliPath, backendConfig.args, normalizedSettings.enableGuard);
+    await sleep(2000);
     if (!processState.backend.running) {
       errors.push(processState.backend.lastError || buildServiceError('backend', '后端服务启动失败。', getRecentLogs('backend')));
     }
   }
 
-  if (!errors.length && normalizedSettings.enableFrontendService) {
-    if (!processState.frontend.running) {
-      await spawnCli('frontend', normalizedSettings.frontendCliPath, normalizedSettings.frontendCliArgs, normalizedSettings.enableGuard);
-      await sleep(2000);
-    }
-
+  if (!errors.length && normalizedSettings.enableFrontendService && !processState.frontend.running) {
+    const frontendConfig = getServiceLaunchConfig('frontend', normalizedSettings);
+    await spawnCli('frontend', frontendConfig.cliPath, frontendConfig.args, normalizedSettings.enableGuard);
+    await sleep(2000);
     if (!processState.frontend.running) {
       errors.push(processState.frontend.lastError || buildServiceError('frontend', '前端服务启动失败。', getRecentLogs('frontend')));
     }
@@ -406,30 +555,25 @@ async function startServicesBySettings(settings) {
 
   notifyCliState();
 
-  if (errors.length > 0) {
-    return { ok: false, errors };
-  }
-
-  return { ok: true, errors: [] };
+  return {
+    ok: errors.length === 0,
+    errors
+  };
 }
 
-function collectSettingsApplyErrors(settings) {
-  const normalizedSettings = {
-    ...settings,
-    enableFrontendService: settings.enableBackendService ? settings.enableFrontendService : false
-  };
-
+function collectSettingsApplyErrors(settings, validationErrors = []) {
+  const normalizedSettings = normalizeSettings(settings);
   if (!normalizedSettings.autoStartServices) {
     return [];
   }
 
-  const errors = [];
+  const errors = [...validationErrors];
 
-  if (normalizedSettings.enableBackendService && !processState.backend.running) {
+  if (normalizedSettings.enableBackendService && !processState.backend.running && !errors.some((item) => item.target === 'backend')) {
     errors.push(processState.backend.lastError || buildServiceError('backend', '后端服务启动失败。', getRecentLogs('backend')));
   }
 
-  if (normalizedSettings.enableFrontendService && !processState.frontend.running) {
+  if (normalizedSettings.enableFrontendService && !processState.frontend.running && !errors.some((item) => item.target === 'frontend')) {
     errors.push(processState.frontend.lastError || buildServiceError('frontend', '前端服务启动失败。', getRecentLogs('frontend')));
   }
 
@@ -443,7 +587,7 @@ function createMainWindow() {
     minWidth: 980,
     minHeight: 620,
     show: false,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#f6f7fb',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -458,8 +602,8 @@ function createMainWindow() {
     windowOptions.frame = false;
     windowOptions.titleBarStyle = 'hidden';
     windowOptions.titleBarOverlay = {
-      color: '#111827',
-      symbolColor: '#ffffff',
+      color: '#f6f7fb',
+      symbolColor: '#0f172a',
       height: 38
     };
   }
@@ -544,23 +688,21 @@ ipcMain.handle('settings:get', () => {
       enableFrontendService: !!settings.enableFrontendService,
       enableBackendService: !!settings.enableBackendService,
       autoStartServices: !!settings.autoStartServices
-    }
+    },
+    meta: getMetaPayload(settings)
   };
 });
 
 ipcMain.handle('settings:save', async (_event, payload) => {
-  const normalizedPayload = {
-    ...payload,
-    enableFrontendService: payload.enableBackendService ? payload.enableFrontendService : false
-  };
-  const saved = writeSettings(normalizedPayload);
-  await applyCliBySettings(saved);
-  const errors = collectSettingsApplyErrors(saved);
+  const saved = writeSettings(payload);
+  const validationErrors = await applyCliBySettings(saved);
+  const errors = collectSettingsApplyErrors(saved, validationErrors);
   return {
     ok: errors.length === 0,
     settings: saved,
     errors,
-    state: getCliStatePayload()
+    state: getCliStatePayload(),
+    meta: getMetaPayload(saved)
   };
 });
 
@@ -570,8 +712,30 @@ ipcMain.handle('services:start', async () => {
   return {
     ok: result.ok,
     errors: result.errors,
-    state: getCliStatePayload()
+    state: getCliStatePayload(),
+    meta: getMetaPayload(settings)
   };
+});
+
+ipcMain.handle('dialog:select-onnx', async () => {
+  const result = await dialog.showOpenDialog({
+    title: '选择 ONNX 模型文件',
+    properties: ['openFile'],
+    filters: [
+      { name: 'ONNX Model', extensions: ['onnx'] }
+    ]
+  });
+
+  if (result.canceled || !result.filePaths[0]) {
+    return { canceled: true, filePath: '' };
+  }
+
+  return { canceled: false, filePath: result.filePaths[0] };
+});
+
+ipcMain.handle('external:open', async (_event, url) => {
+  await shell.openExternal(url);
+  return true;
 });
 
 ipcMain.handle('window:minimize', () => {

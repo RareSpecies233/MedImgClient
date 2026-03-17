@@ -4,27 +4,47 @@ const homeView = document.getElementById('homeView');
 
 const btnStart = document.getElementById('btnStart');
 const btnSettings = document.getElementById('btnSettings');
+const btnDeveloperMode = document.getElementById('btnDeveloperMode');
+const btnQuickPreprocess = document.getElementById('btnQuickPreprocess');
+const btnQuickAnalysis = document.getElementById('btnQuickAnalysis');
+const btnQuickReconstruction = document.getElementById('btnQuickReconstruction');
+const btnQuickConsult = document.getElementById('btnQuickConsult');
 const cliStatusText = document.getElementById('cliStatusText');
+const lanAccessLink = document.getElementById('lanAccessLink');
+const defaultStartUrl = document.getElementById('defaultStartUrl');
 
 const settingsModal = document.getElementById('settingsModal');
 const closeSettings = document.getElementById('closeSettings');
 const saveSettings = document.getElementById('saveSettings');
 
+const developerModal = document.getElementById('developerModal');
+const closeDeveloperMode = document.getElementById('closeDeveloperMode');
+const saveDeveloperSettings = document.getElementById('saveDeveloperSettings');
+const btnBackendAdvanced = document.getElementById('btnBackendAdvanced');
+
 const enableFrontendService = document.getElementById('enableFrontendService');
-const frontendCliPath = document.getElementById('frontendCliPath');
-const frontendCliArgs = document.getElementById('frontendCliArgs');
 const enableBackendService = document.getElementById('enableBackendService');
-const backendCliPath = document.getElementById('backendCliPath');
-const backendCliArgs = document.getElementById('backendCliArgs');
 const autoStartServices = document.getElementById('autoStartServices');
 const enableGuard = document.getElementById('enableGuard');
 const guardRestartDelaySeconds = document.getElementById('guardRestartDelaySeconds');
-const newTabDefaultUrl = document.getElementById('newTabDefaultUrl');
+const servicePort = document.getElementById('servicePort');
+const apiPort = document.getElementById('apiPort');
+const modelType = document.getElementById('modelType');
+const onnxPath = document.getElementById('onnxPath');
+const selectOnnxFile = document.getElementById('selectOnnxFile');
+
+const frontendFixedPath = document.getElementById('frontendFixedPath');
+const backendFixedPath = document.getElementById('backendFixedPath');
+const developerFrontendFixedPath = document.getElementById('developerFrontendFixedPath');
+const developerBackendFixedPath = document.getElementById('developerBackendFixedPath');
+const developerFrontendArgs = document.getElementById('developerFrontendArgs');
+const developerBackendArgs = document.getElementById('developerBackendArgs');
+const frontendLogs = document.getElementById('frontendLogs');
+const backendLogs = document.getElementById('backendLogs');
+
 const serviceErrorPanel = document.getElementById('serviceErrorPanel');
 const serviceErrorSummary = document.getElementById('serviceErrorSummary');
 const serviceErrorDetails = document.getElementById('serviceErrorDetails');
-const frontendLogs = document.getElementById('frontendLogs');
-const backendLogs = document.getElementById('backendLogs');
 
 const btnMin = document.getElementById('btnMin');
 const btnMax = document.getElementById('btnMax');
@@ -32,15 +52,33 @@ const btnClose = document.getElementById('btnClose');
 
 let settings = {
   enableFrontendService: true,
-  frontendCliPath: '',
-  frontendCliArgs: '',
   enableBackendService: true,
-  backendCliPath: '',
-  backendCliArgs: '',
   autoStartServices: true,
   enableGuard: false,
   guardRestartDelaySeconds: 2,
-  newTabDefaultUrl: 'https://www.example.com'
+  port: 3000,
+  apiPort: 3001,
+  onnxPath: '',
+  modelType: 'sota',
+  frontendExtraArgs: '',
+  backendExtraArgs: ''
+};
+
+let appMeta = {
+  fixedPaths: {
+    frontend: '',
+    backend: ''
+  },
+  urls: {
+    start: '',
+    quickPreprocess: '',
+    quickAnalysis: '',
+    quickReconstruction: '',
+    quickConsult: '',
+    developerAbout: '',
+    lan: ''
+  },
+  localNetworkIp: ''
 };
 
 const tabs = [
@@ -64,14 +102,39 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function normalizeUrlCandidate(value) {
-  return typeof value === 'string' ? value.trim() : '';
+function getConfiguredTabUrl(overrideUrl) {
+  return typeof overrideUrl === 'string' && overrideUrl.trim()
+    ? overrideUrl.trim()
+    : appMeta.urls.start;
 }
 
-function getConfiguredTabUrl(overrideUrl) {
-  return normalizeUrlCandidate(overrideUrl)
-    || normalizeUrlCandidate(settings.newTabDefaultUrl)
-    || 'https://www.example.com';
+function applyMeta(meta = {}) {
+  appMeta = {
+    ...appMeta,
+    ...meta,
+    fixedPaths: {
+      ...appMeta.fixedPaths,
+      ...(meta.fixedPaths || {})
+    },
+    urls: {
+      ...appMeta.urls,
+      ...(meta.urls || {})
+    }
+  };
+
+  frontendFixedPath.textContent = appMeta.fixedPaths.frontend || '未找到';
+  backendFixedPath.textContent = appMeta.fixedPaths.backend || '未找到';
+  developerFrontendFixedPath.textContent = appMeta.fixedPaths.frontend || '未找到';
+  developerBackendFixedPath.textContent = appMeta.fixedPaths.backend || '未找到';
+
+  defaultStartUrl.textContent = appMeta.urls.start || 'http://127.0.0.1:3000/client';
+  if (appMeta.urls.lan) {
+    lanAccessLink.textContent = appMeta.urls.lan;
+    lanAccessLink.dataset.url = appMeta.urls.lan;
+  } else {
+    lanAccessLink.textContent = '暂未获取到局域网地址';
+    lanAccessLink.dataset.url = '';
+  }
 }
 
 function applySettingsToFormState() {
@@ -79,6 +142,14 @@ function applySettingsToFormState() {
   enableFrontendService.checked = !!settings.enableFrontendService;
   enableFrontendService.disabled = !settings.enableBackendService;
   autoStartServices.checked = !!settings.autoStartServices;
+  enableGuard.checked = !!settings.enableGuard;
+  guardRestartDelaySeconds.value = String(settings.guardRestartDelaySeconds ?? 2);
+  servicePort.value = String(settings.port ?? 3000);
+  apiPort.value = String(settings.apiPort ?? 3001);
+  modelType.value = settings.modelType || 'sota';
+  onnxPath.value = settings.onnxPath || '';
+  developerFrontendArgs.value = settings.frontendExtraArgs || '';
+  developerBackendArgs.value = settings.backendExtraArgs || '';
 }
 
 function clearServiceErrorView() {
@@ -159,24 +230,52 @@ function areRequiredServicesReady() {
 
 function updateStartButtonStatus() {
   const ready = areRequiredServicesReady();
-
   btnStart.disabled = manualStartInProgress;
   btnStart.textContent = manualStartInProgress ? '正在启动中' : ready ? '开始使用' : '未启动服务';
   cliStatusText.textContent = getServiceStatusText();
 }
 
-async function enableServicesFromPrompt() {
-  const nextSettings = {
+async function persistSettings(partial) {
+  const payload = {
     ...settings,
-    enableBackendService: true,
-    enableFrontendService: true
+    ...partial
   };
 
-  const saved = await window.appApi.saveSettings(nextSettings);
-  settings = saved.settings;
+  if (!payload.enableBackendService) {
+    payload.enableFrontendService = false;
+  }
+
+  const result = await window.appApi.saveSettings(payload);
+  settings = result.settings;
+  applyMeta(result.meta);
   applySettingsToFormState();
 
-  return window.appApi.startServices();
+  if (result.state) {
+    frontendRunning = !!result.state.frontendRunning;
+    backendRunning = !!result.state.backendRunning;
+    frontendStatus = result.state.frontendStatus || 'stopped';
+    backendStatus = result.state.backendStatus || 'stopped';
+    syncErrorStateFromState(result.state);
+  }
+
+  return result;
+}
+
+async function startServicesNow() {
+  const result = await window.appApi.startServices();
+  if (result.meta) {
+    applyMeta(result.meta);
+  }
+
+  if (result.state) {
+    frontendRunning = !!result.state.frontendRunning;
+    backendRunning = !!result.state.backendRunning;
+    frontendStatus = result.state.frontendStatus || 'stopped';
+    backendStatus = result.state.backendStatus || 'stopped';
+    syncErrorStateFromState(result.state);
+  }
+
+  return result;
 }
 
 function createTabPage(tab) {
@@ -224,12 +323,11 @@ function switchTab(tabId) {
 
 function addNewTab(initialUrl) {
   const id = `tab-${Date.now()}-${tabCounter}`;
-  const title = '新标签页';
   tabCounter += 1;
 
   const tab = {
     id,
-    title,
+    title: '新标签页',
     type: 'web',
     closable: true,
     url: getConfiguredTabUrl(initialUrl)
@@ -296,36 +394,30 @@ function renderTabs() {
   addBtn.className = 'tab-add';
   addBtn.textContent = '+';
   addBtn.title = '新建标签页';
-  addBtn.addEventListener('click', () => addNewTab());
+  addBtn.addEventListener('click', () => {
+    void openServicePage(appMeta.urls.start);
+  });
   tabsContainer.appendChild(addBtn);
-}
-
-function fillSettingsForm() {
-  enableFrontendService.checked = !!settings.enableFrontendService;
-  enableFrontendService.disabled = !settings.enableBackendService;
-  frontendCliPath.value = settings.frontendCliPath || '';
-  frontendCliArgs.value = settings.frontendCliArgs || '';
-  enableBackendService.checked = !!settings.enableBackendService;
-  backendCliPath.value = settings.backendCliPath || '';
-  backendCliArgs.value = settings.backendCliArgs || '';
-  autoStartServices.checked = !!settings.autoStartServices;
-  enableGuard.checked = !!settings.enableGuard;
-  guardRestartDelaySeconds.value = String(settings.guardRestartDelaySeconds ?? 2);
-  newTabDefaultUrl.value = settings.newTabDefaultUrl || '';
 }
 
 function collectSettingsForm() {
   return {
     enableFrontendService: enableFrontendService.checked,
-    frontendCliPath: frontendCliPath.value.trim(),
-    frontendCliArgs: frontendCliArgs.value.trim(),
     enableBackendService: enableBackendService.checked,
-    backendCliPath: backendCliPath.value.trim(),
-    backendCliArgs: backendCliArgs.value.trim(),
     autoStartServices: autoStartServices.checked,
     enableGuard: enableGuard.checked,
     guardRestartDelaySeconds: Number.parseInt(guardRestartDelaySeconds.value, 10),
-    newTabDefaultUrl: newTabDefaultUrl.value.trim()
+    port: Number.parseInt(servicePort.value, 10),
+    apiPort: Number.parseInt(apiPort.value, 10),
+    modelType: modelType.value,
+    onnxPath: onnxPath.value.trim()
+  };
+}
+
+function collectDeveloperForm() {
+  return {
+    frontendExtraArgs: developerFrontendArgs.value.trim(),
+    backendExtraArgs: developerBackendArgs.value.trim()
   };
 }
 
@@ -340,12 +432,21 @@ function appendLogToView(target, line) {
 }
 
 function showSettingsModal() {
-  fillSettingsForm();
+  applySettingsToFormState();
   settingsModal.classList.remove('hidden');
 }
 
 function hideSettingsModal() {
   settingsModal.classList.add('hidden');
+}
+
+function showDeveloperModal() {
+  applySettingsToFormState();
+  developerModal.classList.remove('hidden');
+}
+
+function hideDeveloperModal() {
+  developerModal.classList.add('hidden');
 }
 
 function setupWindowControls() {
@@ -362,6 +463,59 @@ function setupWindowControls() {
   btnClose.addEventListener('click', () => window.appApi.windowControl.close());
 }
 
+async function openServicePage(url) {
+  if (areRequiredServicesReady()) {
+    addNewTab(url);
+    return;
+  }
+
+  const shouldStart = window.confirm('检测到服务未启动，是否现在启用前后端服务并打开页面？');
+  if (!shouldStart) return;
+
+  manualStartInProgress = true;
+  clearServiceErrorView();
+  updateStartButtonStatus();
+
+  try {
+    await persistSettings({
+      enableBackendService: true,
+      enableFrontendService: true
+    });
+
+    const result = await startServicesNow();
+
+    if (!result.ok) {
+      setServiceErrorView(result.errors || []);
+      showSettingsModal();
+      window.alert('启动服务失败，请查看设置界面的详细错误信息。');
+      return;
+    }
+
+    await delay(2000);
+
+    if (!areRequiredServicesReady()) {
+      showSettingsModal();
+      window.alert('服务未在预期时间内就绪，请查看设置界面的详细错误信息。');
+      return;
+    }
+
+    addNewTab(url);
+  } catch (error) {
+    setServiceErrorView([
+      {
+        target: 'system',
+        summary: `启动服务失败：${error.message}`,
+        details: error.stack || error.message
+      }
+    ]);
+    showSettingsModal();
+    window.alert(`启动服务失败：${error.message}`);
+  } finally {
+    manualStartInProgress = false;
+    updateStartButtonStatus();
+  }
+}
+
 async function bootstrap() {
   renderTabs();
   switchTab('home');
@@ -369,6 +523,7 @@ async function bootstrap() {
 
   const initial = await window.appApi.getSettings();
   settings = initial.settings;
+  applyMeta(initial.meta);
   applySettingsToFormState();
 
   frontendLogs.value = (initial.logs.frontend || []).join('\n');
@@ -381,57 +536,33 @@ async function bootstrap() {
   syncErrorStateFromState(initial.state);
   updateStartButtonStatus();
 
-  btnStart.addEventListener('click', async () => {
-    if (areRequiredServicesReady()) {
-      addNewTab();
-      return;
-    }
+  btnStart.addEventListener('click', () => {
+    void openServicePage(appMeta.urls.start);
+  });
 
-    const shouldStart = window.confirm('检测到服务未启动，是否现在启用前后端服务并打开新标签页？');
-    if (!shouldStart) return;
+  btnQuickPreprocess.addEventListener('click', () => {
+    void openServicePage(appMeta.urls.quickPreprocess);
+  });
 
-    manualStartInProgress = true;
-    clearServiceErrorView();
-    updateStartButtonStatus();
+  btnQuickAnalysis.addEventListener('click', () => {
+    void openServicePage(appMeta.urls.quickAnalysis);
+  });
 
-    try {
-      const result = await enableServicesFromPrompt();
-      frontendRunning = !!result.state.frontendRunning;
-      backendRunning = !!result.state.backendRunning;
-      frontendStatus = result.state.frontendStatus || 'stopped';
-      backendStatus = result.state.backendStatus || 'stopped';
-      syncErrorStateFromState(result.state);
+  btnQuickReconstruction.addEventListener('click', () => {
+    void openServicePage(appMeta.urls.quickReconstruction);
+  });
 
-      if (!result.ok) {
-        setServiceErrorView(result.errors || []);
-        showSettingsModal();
-        window.alert('启动服务失败，请查看设置界面的详细错误信息。');
-        return;
-      }
+  btnQuickConsult.addEventListener('click', () => {
+    void openServicePage(appMeta.urls.quickConsult);
+  });
 
-      await delay(2000);
+  btnDeveloperMode.addEventListener('click', showDeveloperModal);
 
-      if (!areRequiredServicesReady()) {
-        showSettingsModal();
-        window.alert('服务未在预期时间内就绪，请查看设置界面的详细错误信息。');
-        return;
-      }
-
-      addNewTab();
-    } catch (error) {
-      window.alert(`启动服务失败：${error.message}`);
-      setServiceErrorView([
-        {
-          target: 'system',
-          summary: `启动服务失败：${error.message}`,
-          details: error.stack || error.message
-        }
-      ]);
-      showSettingsModal();
-    } finally {
-      manualStartInProgress = false;
-      updateStartButtonStatus();
-    }
+  lanAccessLink.addEventListener('click', (event) => {
+    event.preventDefault();
+    const url = lanAccessLink.dataset.url;
+    if (!url) return;
+    void window.appApi.openExternal(url);
   });
 
   enableBackendService.addEventListener('change', () => {
@@ -449,34 +580,30 @@ async function bootstrap() {
     if (event.target === settingsModal) hideSettingsModal();
   });
 
-  saveSettings.addEventListener('click', async () => {
-    const payload = collectSettingsForm();
-    if (!payload.enableBackendService) {
-      payload.enableFrontendService = false;
+  closeDeveloperMode.addEventListener('click', hideDeveloperModal);
+  developerModal.addEventListener('click', (event) => {
+    if (event.target === developerModal) hideDeveloperModal();
+  });
+
+  selectOnnxFile.addEventListener('click', async () => {
+    const result = await window.appApi.selectOnnxFile();
+    if (!result.canceled && result.filePath) {
+      onnxPath.value = result.filePath;
     }
+  });
 
+  saveSettings.addEventListener('click', async () => {
     try {
-      const result = await window.appApi.saveSettings(payload);
-      settings = result.settings;
-      applySettingsToFormState();
-
-      if (result.state) {
-        frontendRunning = !!result.state.frontendRunning;
-        backendRunning = !!result.state.backendRunning;
-        frontendStatus = result.state.frontendStatus || 'stopped';
-        backendStatus = result.state.backendStatus || 'stopped';
-        syncErrorStateFromState(result.state);
-      }
+      const result = await persistSettings(collectSettingsForm());
+      updateStartButtonStatus();
 
       if (!result.ok) {
         setServiceErrorView(result.errors || []);
-        updateStartButtonStatus();
         window.alert('保存设置成功，但服务启动失败，请查看当前弹窗中的详细错误信息。');
         return;
       }
 
       clearServiceErrorView();
-      updateStartButtonStatus();
       hideSettingsModal();
     } catch (error) {
       setServiceErrorView([
@@ -489,6 +616,24 @@ async function bootstrap() {
       updateStartButtonStatus();
       window.alert(`保存设置失败：${error.message}`);
     }
+  });
+
+  saveDeveloperSettings.addEventListener('click', async () => {
+    try {
+      const result = await persistSettings(collectDeveloperForm());
+      updateStartButtonStatus();
+      if (!result.ok) {
+        window.alert('开发者设置已保存，但当前服务状态存在错误，请查看设置界面的详细错误信息。');
+        return;
+      }
+      hideDeveloperModal();
+    } catch (error) {
+      window.alert(`保存开发者设置失败：${error.message}`);
+    }
+  });
+
+  btnBackendAdvanced.addEventListener('click', () => {
+    void openServicePage(appMeta.urls.developerAbout);
   });
 
   window.appApi.onCliLog(({ target, line }) => {

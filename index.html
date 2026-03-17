@@ -21,11 +21,32 @@
       <main class="content" id="contentArea">
         <section class="home-view" id="homeView">
           <div class="home-card">
+            <div class="home-badge">MedImg Client</div>
             <h1>欢迎使用</h1>
             <p id="cliStatusText">正在启动中...</p>
+            <p class="home-link-text">
+              局域网中可在浏览器中访问
+              <a href="#" id="lanAccessLink">暂未获取到局域网地址</a>
+              在线使用
+            </p>
+            <div class="home-meta">
+              <div class="home-meta-item">
+                <span>默认入口</span>
+                <strong id="defaultStartUrl">http://127.0.0.1:3000/client</strong>
+              </div>
+            </div>
             <div class="home-actions">
               <button id="btnStart" disabled>正在启动中</button>
               <button id="btnSettings">设置</button>
+            </div>
+            <div class="quick-actions">
+              <button id="btnQuickPreprocess" class="secondary-action">临时快速预处理</button>
+              <button id="btnQuickAnalysis" class="secondary-action">临时快速Ai分析</button>
+              <button id="btnQuickReconstruction" class="secondary-action">临时快速三维重建</button>
+              <button id="btnQuickConsult" class="secondary-action">临时快速Ai问诊</button>
+            </div>
+            <div class="home-footer-actions">
+              <button id="btnDeveloperMode" class="ghost-action">开发者模式</button>
             </div>
           </div>
         </section>
@@ -41,6 +62,18 @@
         </div>
 
         <div class="modal-body">
+          <div class="setting-group setting-group-full fixed-paths-panel">
+            <label>固定程序路径</label>
+            <div class="fixed-path-item">
+              <span>前端</span>
+              <code id="frontendFixedPath"></code>
+            </div>
+            <div class="fixed-path-item">
+              <span>后端</span>
+              <code id="backendFixedPath"></code>
+            </div>
+          </div>
+
           <div class="setting-group checkbox-group">
             <label>
               <input type="checkbox" id="enableFrontendService" />
@@ -48,12 +81,12 @@
             </label>
           </div>
           <div class="setting-group">
-            <label>前端 CLI 程序路径</label>
-            <input type="text" id="frontendCliPath" placeholder="例如: /path/to/frontend-cli" />
+            <label>服务端口号</label>
+            <input type="number" id="servicePort" min="1" max="65535" placeholder="3000" />
           </div>
           <div class="setting-group">
-            <label>前端 CLI 程序参数</label>
-            <input type="text" id="frontendCliArgs" placeholder="例如: --port 8080" />
+            <label>API 端口号</label>
+            <input type="number" id="apiPort" min="1" max="65535" placeholder="3001" />
           </div>
 
           <div class="setting-group checkbox-group">
@@ -63,12 +96,21 @@
             </label>
           </div>
           <div class="setting-group">
-            <label>后端 CLI 程序路径</label>
-            <input type="text" id="backendCliPath" placeholder="例如: /path/to/backend-cli" />
+            <label>模型推理模式</label>
+            <select id="modelType">
+              <option value="no_prompt">no_prompt</option>
+              <option value="pts">pts</option>
+              <option value="box">box</option>
+              <option value="box+pts">box+pts</option>
+              <option value="sota">sota</option>
+            </select>
           </div>
           <div class="setting-group">
-            <label>后端 CLI 程序参数</label>
-            <input type="text" id="backendCliArgs" placeholder="例如: --env prod" />
+            <label>ONNX 文件地址</label>
+            <div class="file-picker-row">
+              <input type="text" id="onnxPath" readonly placeholder="请选择 .onnx 文件" />
+              <button id="selectOnnxFile" type="button" class="secondary-action">选择文件</button>
+            </div>
           </div>
 
           <div class="setting-group checkbox-group">
@@ -90,18 +132,49 @@
             <input type="number" id="guardRestartDelaySeconds" min="0" step="1" placeholder="2" />
           </div>
 
-          <div class="setting-group">
-            <label>开始使用 / 新建标签页地址</label>
-            <input type="text" id="newTabDefaultUrl" placeholder="https://example.com" />
-          </div>
-
           <div class="setting-group error-panel hidden" id="serviceErrorPanel">
             <label>服务启动错误详情</label>
             <div class="error-summary" id="serviceErrorSummary"></div>
             <textarea id="serviceErrorDetails" readonly></textarea>
           </div>
+        </div>
 
-          <div class="logs-wrap">
+        <div class="modal-footer">
+          <button id="saveSettings">保存设置</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop hidden" id="developerModal">
+      <div class="modal developer-modal" role="dialog" aria-modal="true" aria-label="开发者模式">
+        <div class="modal-header">
+          <h2>开发者模式</h2>
+          <button id="closeDeveloperMode">✕</button>
+        </div>
+
+        <div class="modal-body developer-body">
+          <div class="setting-group setting-group-full fixed-paths-panel">
+            <label>固定程序路径</label>
+            <div class="fixed-path-item">
+              <span>前端</span>
+              <code id="developerFrontendFixedPath"></code>
+            </div>
+            <div class="fixed-path-item">
+              <span>后端</span>
+              <code id="developerBackendFixedPath"></code>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <label>前端附加参数</label>
+            <textarea id="developerFrontendArgs" placeholder="会附加在 --port 和 --apiport 后面"></textarea>
+          </div>
+          <div class="setting-group">
+            <label>后端附加参数</label>
+            <textarea id="developerBackendArgs" placeholder="会附加在 --apiport、--onnx、--model_type 后面"></textarea>
+          </div>
+
+          <div class="logs-wrap setting-group-full">
             <div>
               <h3>前端 CLI 输出</h3>
               <textarea id="frontendLogs" readonly></textarea>
@@ -113,8 +186,9 @@
           </div>
         </div>
 
-        <div class="modal-footer">
-          <button id="saveSettings">保存设置</button>
+        <div class="modal-footer developer-footer">
+          <button id="btnBackendAdvanced" class="secondary-action">后端高级设置</button>
+          <button id="saveDeveloperSettings">保存开发者设置</button>
         </div>
       </div>
     </div>
