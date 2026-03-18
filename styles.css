@@ -75,7 +75,6 @@ textarea {
   gap: 4px;
   overflow: hidden;
   width: 100%;
-  -webkit-app-region: no-drag;
 }
 
 .tab-item,
@@ -92,9 +91,11 @@ textarea {
   cursor: pointer;
   user-select: none;
   font-size: 12px;
+  height: 26px;
   min-height: 26px;
   line-height: 1;
   flex: 0 0 auto;
+  -webkit-app-region: no-drag;
 }
 
 .tab-item.active {
@@ -110,6 +111,11 @@ textarea {
   color: var(--muted);
   cursor: pointer;
   font-size: 12px;
+  padding: 0;
+  width: 12px;
+  height: 12px;
+  line-height: 1;
+  -webkit-app-region: no-drag;
 }
 
 .tab-close:hover {

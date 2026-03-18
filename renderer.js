@@ -9,6 +9,7 @@ const btnQuickAnalysis = document.getElementById('btnQuickAnalysis');
 const btnQuickReconstruction = document.getElementById('btnQuickReconstruction');
 const btnQuickConsult = document.getElementById('btnQuickConsult');
 const cliStatusText = document.getElementById('cliStatusText');
+const homeLanHint = document.getElementById('homeLanHint');
 const lanAccessLink = document.getElementById('lanAccessLink');
 const lanAddressText = document.getElementById('lanAddressText');
 
@@ -21,9 +22,6 @@ const frontendRuntimeStatus = document.getElementById('frontendRuntimeStatus');
 const backendRuntimeStatus = document.getElementById('backendRuntimeStatus');
 const toggleFrontendRuntime = document.getElementById('toggleFrontendRuntime');
 const toggleBackendRuntime = document.getElementById('toggleBackendRuntime');
-
-const enableFrontendService = document.getElementById('enableFrontendService');
-const enableBackendService = document.getElementById('enableBackendService');
 const autoStartServices = document.getElementById('autoStartServices');
 const enableGuard = document.getElementById('enableGuard');
 const guardRestartDelaySeconds = document.getElementById('guardRestartDelaySeconds');
@@ -115,9 +113,6 @@ function applyMeta(meta = {}) {
 }
 
 function applySettingsToFormState() {
-  enableBackendService.checked = !!settings.enableBackendService;
-  enableFrontendService.checked = !!settings.enableFrontendService;
-  enableFrontendService.disabled = !settings.enableBackendService;
   autoStartServices.checked = !!settings.autoStartServices;
   enableGuard.checked = !!settings.enableGuard;
   guardRestartDelaySeconds.value = String(settings.guardRestartDelaySeconds ?? 2);
@@ -141,6 +136,11 @@ function updateServiceRuntimeControls() {
 
   toggleFrontendRuntime.textContent = frontendRunning ? '停止前端服务' : '启动前端服务';
   toggleBackendRuntime.textContent = backendRunning ? '停止后端服务' : '启动后端服务';
+}
+
+function updateHomeLanHint() {
+  const shouldShow = areRequiredServicesReady();
+  homeLanHint.classList.toggle('hidden', !shouldShow);
 }
 
 async function handleRuntimeToggle(target) {
@@ -246,7 +246,7 @@ function applyDeveloperContent(page) {
   backendLogs.value = cliLogs.backend.join('\n');
 
   page.querySelector('[data-action="advanced"]').addEventListener('click', () => {
-    void window.appApi.openExternal(`http://localhost:${settings.port}/client/about`);
+    void openServicePage(`http://localhost:${settings.port}/client/about`);
   });
 
   page.querySelector('[data-action="save"]').addEventListener('click', async () => {
@@ -344,6 +344,7 @@ function updateStartButtonStatus() {
   btnStart.disabled = manualStartInProgress;
   btnStart.textContent = manualStartInProgress ? '正在启动中' : ready ? '开始使用' : '未启动服务';
   cliStatusText.textContent = getServiceStatusText();
+  updateHomeLanHint();
 }
 
 async function persistSettings(partial) {
@@ -546,8 +547,8 @@ function renderTabs() {
 
 function collectSettingsForm() {
   return {
-    enableFrontendService: enableFrontendService.checked,
-    enableBackendService: enableBackendService.checked,
+    enableFrontendService: settings.enableFrontendService,
+    enableBackendService: settings.enableBackendService,
     autoStartServices: autoStartServices.checked,
     enableGuard: enableGuard.checked,
     guardRestartDelaySeconds: Number.parseInt(guardRestartDelaySeconds.value, 10),
@@ -673,15 +674,6 @@ async function bootstrap() {
     const url = lanAccessLink.dataset.url;
     if (!url) return;
     void window.appApi.openExternal(url);
-  });
-
-  enableBackendService.addEventListener('change', () => {
-    if (!enableBackendService.checked) {
-      enableFrontendService.checked = false;
-      enableFrontendService.disabled = true;
-      return;
-    }
-    enableFrontendService.disabled = false;
   });
 
   btnSettings.addEventListener('click', showSettingsModal);

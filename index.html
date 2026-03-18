@@ -30,7 +30,7 @@
             <div class="home-badge">MedImg Client</div>
             <h1>欢迎使用</h1>
             <p id="cliStatusText">正在启动中...</p>
-            <p class="home-link-text">
+            <p class="home-link-text hidden" id="homeLanHint">
               局域网中可在浏览器中访问
               <span class="lan-address-wrap">【<span id="lanAddressText">http://本机ip:3000</span>】</span>
               <a href="#" id="lanAccessLink">在线使用</a>
@@ -79,13 +79,6 @@
               </div>
             </div>
           </div>
-
-          <div class="setting-group checkbox-group">
-            <label>
-              <input type="checkbox" id="enableFrontendService" />
-              启用前端服务
-            </label>
-          </div>
           <div class="setting-group">
             <label>服务端口号</label>
             <input type="number" id="servicePort" min="1" max="65535" placeholder="3000" />
@@ -93,13 +86,6 @@
           <div class="setting-group">
             <label>API 端口号</label>
             <input type="number" id="apiPort" min="1" max="65535" placeholder="3001" />
-          </div>
-
-          <div class="setting-group checkbox-group">
-            <label>
-              <input type="checkbox" id="enableBackendService" />
-              启用后端服务
-            </label>
           </div>
           <div class="setting-group">
             <label>模型推理模式</label>
