@@ -110,7 +110,7 @@ function applyMeta(meta = {}) {
     }
   };
 
-  lanAddressText.textContent = appMeta.urls.lanPlaceholder || 'http://本机局ip:3000';
+  lanAddressText.textContent = appMeta.urls.lanPlaceholder || 'http://本机ip:3000';
   lanAccessLink.dataset.url = appMeta.urls.lanAccess || '';
 }
 

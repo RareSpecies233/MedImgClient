@@ -183,7 +183,7 @@ function getMetaPayload(settings) {
       quickReconstruction: buildClientUrl(settings.port, 'localhost', '/client/temp/reconstruction'),
       quickConsult: buildClientUrl(settings.port, 'localhost', '/client/temp/consult'),
       lanAccess: `http://localhost:${settings.port}`,
-      lanPlaceholder: `http://本机局ip:${settings.port}`
+      lanPlaceholder: `http://本机ip:${settings.port}`
     },
     platform: process.platform
   };
