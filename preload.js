@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('appApi', {
   startServices() {
     return ipcRenderer.invoke('services:start');
   },
+  controlService(action, target) {
+    return ipcRenderer.invoke('services:control', { action, target });
+  },
   selectOnnxFile() {
     return ipcRenderer.invoke('dialog:select-onnx');
   },
@@ -18,9 +21,6 @@ contextBridge.exposeInMainWorld('appApi', {
   },
   openExternal(url) {
     return ipcRenderer.invoke('external:open', url);
-  },
-  openDeveloperWindow() {
-    return ipcRenderer.invoke('window:open-developer');
   },
   onCliLog(listener) {
     const wrapped = (_event, payload) => listener(payload);

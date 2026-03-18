@@ -17,6 +17,10 @@ const closeSettings = document.getElementById('closeSettings');
 const saveSettings = document.getElementById('saveSettings');
 const openDeveloperMode = document.getElementById('openDeveloperMode');
 const resetDatabase = document.getElementById('resetDatabase');
+const frontendRuntimeStatus = document.getElementById('frontendRuntimeStatus');
+const backendRuntimeStatus = document.getElementById('backendRuntimeStatus');
+const toggleFrontendRuntime = document.getElementById('toggleFrontendRuntime');
+const toggleBackendRuntime = document.getElementById('toggleBackendRuntime');
 
 const enableFrontendService = document.getElementById('enableFrontendService');
 const enableBackendService = document.getElementById('enableBackendService');
@@ -62,6 +66,11 @@ let appMeta = {
     lanPlaceholder: ''
   },
   platform: ''
+};
+
+let cliLogs = {
+  frontend: [],
+  backend: []
 };
 
 const tabs = [
@@ -118,6 +127,48 @@ function applySettingsToFormState() {
   onnxPath.value = settings.onnxPath || '';
 }
 
+function getRuntimeStatusLabel(target) {
+  const running = target === 'frontend' ? frontendRunning : backendRunning;
+  return running ? '已启动' : '未启动';
+}
+
+function updateServiceRuntimeControls() {
+  frontendRuntimeStatus.textContent = getRuntimeStatusLabel('frontend');
+  backendRuntimeStatus.textContent = getRuntimeStatusLabel('backend');
+
+  frontendRuntimeStatus.classList.toggle('running', frontendRunning);
+  backendRuntimeStatus.classList.toggle('running', backendRunning);
+
+  toggleFrontendRuntime.textContent = frontendRunning ? '停止前端服务' : '启动前端服务';
+  toggleBackendRuntime.textContent = backendRunning ? '停止后端服务' : '启动后端服务';
+}
+
+async function handleRuntimeToggle(target) {
+  try {
+    const running = target === 'frontend' ? frontendRunning : backendRunning;
+    const action = running ? 'stop' : 'start';
+    const result = await window.appApi.controlService(action, target);
+
+    settings = result.settings || settings;
+    applyMeta(result.meta || {});
+    applySettingsToFormState();
+    frontendRunning = !!result.state.frontendRunning;
+    backendRunning = !!result.state.backendRunning;
+    frontendStatus = result.state.frontendStatus || 'stopped';
+    backendStatus = result.state.backendStatus || 'stopped';
+    syncErrorStateFromState(result.state);
+    updateServiceRuntimeControls();
+    updateStartButtonStatus();
+    syncDeveloperTabState();
+
+    if (!result.ok) {
+      window.alert('服务操作失败，请查看设置中的错误详情。');
+    }
+  } catch (error) {
+    window.alert(`服务操作失败：${error.message}`);
+  }
+}
+
 function clearServiceErrorView() {
   serviceErrorPanel.classList.add('hidden');
   serviceErrorSummary.textContent = '';
@@ -148,6 +199,100 @@ function syncErrorStateFromState(state) {
     return;
   }
   clearServiceErrorView();
+}
+
+function getDeveloperTab() {
+  return tabs.find((item) => item.type === 'developer') || null;
+}
+
+function applyDeveloperContent(page) {
+  if (!page) return;
+
+  page.innerHTML = `
+    <section class="developer-tab-shell">
+      <div class="developer-toolbar">
+        <button type="button" class="secondary-action" data-action="advanced">后端高级设置</button>
+        <button type="button" data-action="save">保存开发者设置</button>
+      </div>
+      <div class="developer-compact-grid">
+        <div class="setting-group">
+          <label>前端附加参数</label>
+          <textarea id="developerFrontendArgs-${page.dataset.tabId}" placeholder="会附加在 --port 和 --apiport 后面">${settings.frontendExtraArgs || ''}</textarea>
+        </div>
+        <div class="setting-group">
+          <label>后端附加参数</label>
+          <textarea id="developerBackendArgs-${page.dataset.tabId}" placeholder="会附加在 --apiport、--onnx、--model_type 后面">${settings.backendExtraArgs || ''}</textarea>
+        </div>
+      </div>
+      <div class="developer-log-grid">
+        <div>
+          <h3>前端 CLI 输出</h3>
+          <textarea id="developerFrontendLogs-${page.dataset.tabId}" readonly></textarea>
+        </div>
+        <div>
+          <h3>后端 CLI 输出</h3>
+          <textarea id="developerBackendLogs-${page.dataset.tabId}" readonly></textarea>
+        </div>
+      </div>
+    </section>
+  `;
+
+  const frontendArgs = page.querySelector(`#developerFrontendArgs-${page.dataset.tabId}`);
+  const backendArgs = page.querySelector(`#developerBackendArgs-${page.dataset.tabId}`);
+  const frontendLogs = page.querySelector(`#developerFrontendLogs-${page.dataset.tabId}`);
+  const backendLogs = page.querySelector(`#developerBackendLogs-${page.dataset.tabId}`);
+
+  frontendLogs.value = cliLogs.frontend.join('\n');
+  backendLogs.value = cliLogs.backend.join('\n');
+
+  page.querySelector('[data-action="advanced"]').addEventListener('click', () => {
+    void window.appApi.openExternal(`http://localhost:${settings.port}/client/about`);
+  });
+
+  page.querySelector('[data-action="save"]').addEventListener('click', async () => {
+    try {
+      const result = await persistSettings({
+        frontendExtraArgs: frontendArgs.value.trim(),
+        backendExtraArgs: backendArgs.value.trim()
+      });
+      updateStartButtonStatus();
+      if (!result.ok) {
+        window.alert('开发者设置已保存，但当前服务状态存在错误，请查看设置界面的详细错误信息。');
+        return;
+      }
+      window.alert('开发者设置已保存。');
+    } catch (error) {
+      window.alert(`保存开发者设置失败：${error.message}`);
+    }
+  });
+}
+
+function syncDeveloperTabState() {
+  const developerTab = getDeveloperTab();
+  if (!developerTab) return;
+
+  const page = document.getElementById(`page-${developerTab.id}`);
+  if (!page) return;
+
+  const frontendArgs = page.querySelector(`#developerFrontendArgs-${developerTab.id}`);
+  const backendArgs = page.querySelector(`#developerBackendArgs-${developerTab.id}`);
+  const frontendLogs = page.querySelector(`#developerFrontendLogs-${developerTab.id}`);
+  const backendLogs = page.querySelector(`#developerBackendLogs-${developerTab.id}`);
+
+  if (frontendArgs && document.activeElement !== frontendArgs) {
+    frontendArgs.value = settings.frontendExtraArgs || '';
+  }
+  if (backendArgs && document.activeElement !== backendArgs) {
+    backendArgs.value = settings.backendExtraArgs || '';
+  }
+  if (frontendLogs) {
+    frontendLogs.value = cliLogs.frontend.join('\n');
+    frontendLogs.scrollTop = frontendLogs.scrollHeight;
+  }
+  if (backendLogs) {
+    backendLogs.value = cliLogs.backend.join('\n');
+    backendLogs.scrollTop = backendLogs.scrollHeight;
+  }
 }
 
 function getEffectiveServiceState() {
@@ -245,10 +390,18 @@ async function startServicesNow() {
 }
 
 function createTabPage(tab) {
-  if (tab.type !== 'web') return;
   const page = document.createElement('section');
   page.className = 'tab-page';
   page.id = `page-${tab.id}`;
+  page.dataset.tabId = tab.id;
+
+  if (tab.type === 'developer') {
+    applyDeveloperContent(page);
+    tabPages.appendChild(page);
+    return;
+  }
+
+  if (tab.type !== 'web') return;
 
   const webview = document.createElement('webview');
   webview.className = 'tab-webview';
@@ -284,6 +437,11 @@ function switchTab(tabId) {
     page.classList.toggle('active', page.id === `page-${tabId}`);
   });
 
+  const activeTab = tabs.find((item) => item.id === tabId);
+  if (activeTab && activeTab.type === 'developer') {
+    syncDeveloperTabState();
+  }
+
   renderTabs();
 }
 
@@ -318,6 +476,26 @@ function closeTab(tabId) {
   } else {
     renderTabs();
   }
+}
+
+function openDeveloperTab() {
+  const existing = getDeveloperTab();
+  if (existing) {
+    switchTab(existing.id);
+    return;
+  }
+
+  const id = `tab-developer-${Date.now()}`;
+  const tab = {
+    id,
+    title: '开发者模式',
+    type: 'developer',
+    closable: true
+  };
+
+  tabs.push(tab);
+  createTabPage(tab);
+  switchTab(tab.id);
 }
 
 function renderTabs() {
@@ -459,12 +637,15 @@ async function bootstrap() {
   settings = initial.settings;
   applyMeta(initial.meta);
   applySettingsToFormState();
+  cliLogs.frontend = [...(initial.logs.frontend || [])];
+  cliLogs.backend = [...(initial.logs.backend || [])];
 
   frontendRunning = !!initial.state.frontendRunning;
   backendRunning = !!initial.state.backendRunning;
   frontendStatus = initial.state.frontendStatus || 'stopped';
   backendStatus = initial.state.backendStatus || 'stopped';
   syncErrorStateFromState(initial.state);
+  updateServiceRuntimeControls();
   updateStartButtonStatus();
 
   btnStart.addEventListener('click', () => {
@@ -543,7 +724,16 @@ async function bootstrap() {
   });
 
   openDeveloperMode.addEventListener('click', async () => {
-    await window.appApi.openDeveloperWindow();
+    hideSettingsModal();
+    openDeveloperTab();
+  });
+
+  toggleFrontendRuntime.addEventListener('click', () => {
+    void handleRuntimeToggle('frontend');
+  });
+
+  toggleBackendRuntime.addEventListener('click', () => {
+    void handleRuntimeToggle('backend');
   });
 
   resetDatabase.addEventListener('click', async () => {
@@ -570,7 +760,20 @@ async function bootstrap() {
     frontendStatus = state.frontendStatus || 'stopped';
     backendStatus = state.backendStatus || 'stopped';
     syncErrorStateFromState(state);
+    updateServiceRuntimeControls();
     updateStartButtonStatus();
+    syncDeveloperTabState();
+  });
+
+  window.appApi.onCliLog(({ target, line }) => {
+    if (!Array.isArray(cliLogs[target])) {
+      cliLogs[target] = [];
+    }
+    cliLogs[target].push(line);
+    if (cliLogs[target].length > 500) {
+      cliLogs[target].shift();
+    }
+    syncDeveloperTabState();
   });
 }
 

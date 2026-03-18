@@ -20,7 +20,6 @@ const DEFAULT_SETTINGS = {
 };
 
 let mainWindow = null;
-let developerWindow = null;
 let appShuttingDown = false;
 let quitSequenceStarted = false;
 
@@ -83,9 +82,6 @@ function appendLog(target, message) {
   }
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('cli-log', { target, line });
-  }
-  if (developerWindow && !developerWindow.isDestroyed()) {
-    developerWindow.webContents.send('cli-log', { target, line });
   }
 }
 
@@ -196,9 +192,6 @@ function getMetaPayload(settings) {
 function notifyCliState() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('cli-state-updated', getCliStatePayload());
-  }
-  if (developerWindow && !developerWindow.isDestroyed()) {
-    developerWindow.webContents.send('cli-state-updated', getCliStatePayload());
   }
 }
 
@@ -584,8 +577,12 @@ function createMainWindow() {
     }
   };
 
-  windowOptions.frame = false;
-  windowOptions.titleBarStyle = 'hidden';
+  if (process.platform === 'darwin') {
+    windowOptions.titleBarStyle = 'hiddenInset';
+  } else {
+    windowOptions.frame = false;
+    windowOptions.titleBarStyle = 'hidden';
+  }
 
   mainWindow = new BrowserWindow(windowOptions);
   mainWindow.loadFile('index.html');
@@ -598,40 +595,6 @@ function createMainWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
-}
-
-function createDeveloperWindow() {
-  if (developerWindow && !developerWindow.isDestroyed()) {
-    developerWindow.focus();
-    return developerWindow;
-  }
-
-  developerWindow = new BrowserWindow({
-    width: 980,
-    height: 760,
-    minWidth: 760,
-    minHeight: 560,
-    show: false,
-    frame: false,
-    backgroundColor: '#f6f7fb',
-    titleBarStyle: 'hidden',
-    parent: mainWindow || undefined,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false
-    }
-  });
-
-  developerWindow.loadFile('developer.html');
-  developerWindow.once('ready-to-show', () => {
-    developerWindow.show();
-  });
-  developerWindow.on('closed', () => {
-    developerWindow = null;
-  });
-
-  return developerWindow;
 }
 
 async function resetDatabase() {
@@ -745,6 +708,84 @@ ipcMain.handle('services:start', async () => {
   };
 });
 
+ipcMain.handle('services:control', async (_event, payload) => {
+  const { action, target } = payload || {};
+  let settings = readSettings();
+
+  if (action === 'start' && target === 'backend') {
+    settings = writeSettings({
+      ...settings,
+      enableBackendService: true
+    });
+    const result = await startServicesBySettings(settings);
+    return {
+      ok: result.ok,
+      errors: result.errors,
+      settings,
+      state: getCliStatePayload(),
+      meta: getMetaPayload(settings)
+    };
+  }
+
+  if (action === 'start' && target === 'frontend') {
+    settings = writeSettings({
+      ...settings,
+      enableBackendService: true,
+      enableFrontendService: true
+    });
+    const result = await startServicesBySettings(settings);
+    return {
+      ok: result.ok,
+      errors: result.errors,
+      settings,
+      state: getCliStatePayload(),
+      meta: getMetaPayload(settings)
+    };
+  }
+
+  if (action === 'stop' && target === 'frontend') {
+    settings = writeSettings({
+      ...settings,
+      enableFrontendService: false
+    });
+    await stopProcess('frontend', '用户在设置中停止前端服务');
+    notifyCliState();
+    return {
+      ok: true,
+      errors: [],
+      settings,
+      state: getCliStatePayload(),
+      meta: getMetaPayload(settings)
+    };
+  }
+
+  if (action === 'stop' && target === 'backend') {
+    settings = writeSettings({
+      ...settings,
+      enableBackendService: false,
+      enableFrontendService: false
+    });
+    await stopProcess('frontend', '用户在设置中停止后端服务，先停止前端服务');
+    await stopProcess('backend', '用户在设置中停止后端服务');
+    notifyCliState();
+    return {
+      ok: true,
+      errors: [],
+      settings,
+      state: getCliStatePayload(),
+      meta: getMetaPayload(settings)
+    };
+  }
+
+  return {
+    ok: false,
+    errors: [buildServiceError('system', '未知的服务控制动作。', JSON.stringify(payload || {}))],
+    settings,
+    state: getCliStatePayload(),
+    meta: getMetaPayload(settings)
+  };
+});
+
 ipcMain.handle('dialog:select-onnx', async () => {
   const result = await dialog.showOpenDialog({
     title: '选择 ONNX 模型文件',
@@ -792,9 +833,4 @@ ipcMain.handle('window:maximize-toggle', () => {
 ipcMain.handle('window:close', () => {
   const win = BrowserWindow.getFocusedWindow();
   if (win) win.close();
-});
-
-ipcMain.handle('window:open-developer', () => {
-  createDeveloperWindow();
-  return true;
 });

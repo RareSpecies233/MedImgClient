@@ -9,6 +9,8 @@
   <body>
     <div class="app-shell">
       <header class="titlebar">
+        <div class="titlebar-leading-space"></div>
+        <div class="tabs" id="tabsContainer"></div>
         <div class="window-controls" id="windowControls">
           <button id="btnClose" class="window-control close" title="关闭" aria-label="关闭">
             <span>×</span>
@@ -20,9 +22,6 @@
             <span>+</span>
           </button>
         </div>
-        <div class="titlebar-spacer"></div>
-        <div class="tabs" id="tabsContainer"></div>
-        <div class="titlebar-spacer"></div>
       </header>
 
       <main class="content" id="contentArea">
@@ -33,7 +32,7 @@
             <p id="cliStatusText">正在启动中...</p>
             <p class="home-link-text">
               局域网中可在浏览器中访问
-              <span class="lan-address-wrap">【<span id="lanAddressText">http://本机局ip:3000</span>】</span>
+              <span class="lan-address-wrap">【<span id="lanAddressText">http://本机ip:3000</span>】</span>
               <a href="#" id="lanAccessLink">在线使用</a>
             </p>
             <div class="home-actions">
@@ -60,6 +59,27 @@
         </div>
 
         <div class="modal-body">
+          <div class="service-status-grid setting-group-full">
+            <div class="service-status-card">
+              <div class="service-status-head">
+                <strong>前端服务</strong>
+                <span id="frontendRuntimeStatus" class="service-status-badge">未启动</span>
+              </div>
+              <div class="service-status-actions">
+                <button id="toggleFrontendRuntime" type="button" class="secondary-action">启动前端服务</button>
+              </div>
+            </div>
+            <div class="service-status-card">
+              <div class="service-status-head">
+                <strong>后端服务</strong>
+                <span id="backendRuntimeStatus" class="service-status-badge">未启动</span>
+              </div>
+              <div class="service-status-actions">
+                <button id="toggleBackendRuntime" type="button" class="secondary-action">启动后端服务</button>
+              </div>
+            </div>
+          </div>
+
           <div class="setting-group checkbox-group">
             <label>
               <input type="checkbox" id="enableFrontendService" />
