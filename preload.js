@@ -13,8 +13,14 @@ contextBridge.exposeInMainWorld('appApi', {
   selectOnnxFile() {
     return ipcRenderer.invoke('dialog:select-onnx');
   },
+  resetDatabase() {
+    return ipcRenderer.invoke('database:reset');
+  },
   openExternal(url) {
     return ipcRenderer.invoke('external:open', url);
+  },
+  openDeveloperWindow() {
+    return ipcRenderer.invoke('window:open-developer');
   },
   onCliLog(listener) {
     const wrapped = (_event, payload) => listener(payload);

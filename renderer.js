@@ -4,23 +4,19 @@ const homeView = document.getElementById('homeView');
 
 const btnStart = document.getElementById('btnStart');
 const btnSettings = document.getElementById('btnSettings');
-const btnDeveloperMode = document.getElementById('btnDeveloperMode');
 const btnQuickPreprocess = document.getElementById('btnQuickPreprocess');
 const btnQuickAnalysis = document.getElementById('btnQuickAnalysis');
 const btnQuickReconstruction = document.getElementById('btnQuickReconstruction');
 const btnQuickConsult = document.getElementById('btnQuickConsult');
 const cliStatusText = document.getElementById('cliStatusText');
 const lanAccessLink = document.getElementById('lanAccessLink');
-const defaultStartUrl = document.getElementById('defaultStartUrl');
+const lanAddressText = document.getElementById('lanAddressText');
 
 const settingsModal = document.getElementById('settingsModal');
 const closeSettings = document.getElementById('closeSettings');
 const saveSettings = document.getElementById('saveSettings');
-
-const developerModal = document.getElementById('developerModal');
-const closeDeveloperMode = document.getElementById('closeDeveloperMode');
-const saveDeveloperSettings = document.getElementById('saveDeveloperSettings');
-const btnBackendAdvanced = document.getElementById('btnBackendAdvanced');
+const openDeveloperMode = document.getElementById('openDeveloperMode');
+const resetDatabase = document.getElementById('resetDatabase');
 
 const enableFrontendService = document.getElementById('enableFrontendService');
 const enableBackendService = document.getElementById('enableBackendService');
@@ -32,15 +28,6 @@ const apiPort = document.getElementById('apiPort');
 const modelType = document.getElementById('modelType');
 const onnxPath = document.getElementById('onnxPath');
 const selectOnnxFile = document.getElementById('selectOnnxFile');
-
-const frontendFixedPath = document.getElementById('frontendFixedPath');
-const backendFixedPath = document.getElementById('backendFixedPath');
-const developerFrontendFixedPath = document.getElementById('developerFrontendFixedPath');
-const developerBackendFixedPath = document.getElementById('developerBackendFixedPath');
-const developerFrontendArgs = document.getElementById('developerFrontendArgs');
-const developerBackendArgs = document.getElementById('developerBackendArgs');
-const frontendLogs = document.getElementById('frontendLogs');
-const backendLogs = document.getElementById('backendLogs');
 
 const serviceErrorPanel = document.getElementById('serviceErrorPanel');
 const serviceErrorSummary = document.getElementById('serviceErrorSummary');
@@ -65,20 +52,16 @@ let settings = {
 };
 
 let appMeta = {
-  fixedPaths: {
-    frontend: '',
-    backend: ''
-  },
   urls: {
     start: '',
     quickPreprocess: '',
     quickAnalysis: '',
     quickReconstruction: '',
     quickConsult: '',
-    developerAbout: '',
-    lan: ''
+    lanAccess: '',
+    lanPlaceholder: ''
   },
-  localNetworkIp: ''
+  platform: ''
 };
 
 const tabs = [
@@ -112,29 +95,14 @@ function applyMeta(meta = {}) {
   appMeta = {
     ...appMeta,
     ...meta,
-    fixedPaths: {
-      ...appMeta.fixedPaths,
-      ...(meta.fixedPaths || {})
-    },
     urls: {
       ...appMeta.urls,
       ...(meta.urls || {})
     }
   };
 
-  frontendFixedPath.textContent = appMeta.fixedPaths.frontend || '未找到';
-  backendFixedPath.textContent = appMeta.fixedPaths.backend || '未找到';
-  developerFrontendFixedPath.textContent = appMeta.fixedPaths.frontend || '未找到';
-  developerBackendFixedPath.textContent = appMeta.fixedPaths.backend || '未找到';
-
-  defaultStartUrl.textContent = appMeta.urls.start || 'http://127.0.0.1:3000/client';
-  if (appMeta.urls.lan) {
-    lanAccessLink.textContent = appMeta.urls.lan;
-    lanAccessLink.dataset.url = appMeta.urls.lan;
-  } else {
-    lanAccessLink.textContent = '暂未获取到局域网地址';
-    lanAccessLink.dataset.url = '';
-  }
+  lanAddressText.textContent = appMeta.urls.lanPlaceholder || 'http://本机局ip:3000';
+  lanAccessLink.dataset.url = appMeta.urls.lanAccess || '';
 }
 
 function applySettingsToFormState() {
@@ -148,8 +116,6 @@ function applySettingsToFormState() {
   apiPort.value = String(settings.apiPort ?? 3001);
   modelType.value = settings.modelType || 'sota';
   onnxPath.value = settings.onnxPath || '';
-  developerFrontendArgs.value = settings.frontendExtraArgs || '';
-  developerBackendArgs.value = settings.backendExtraArgs || '';
 }
 
 function clearServiceErrorView() {
@@ -414,23 +380,6 @@ function collectSettingsForm() {
   };
 }
 
-function collectDeveloperForm() {
-  return {
-    frontendExtraArgs: developerFrontendArgs.value.trim(),
-    backendExtraArgs: developerBackendArgs.value.trim()
-  };
-}
-
-function appendLogToView(target, line) {
-  if (target === 'frontend') {
-    frontendLogs.value += `${line}\n`;
-    frontendLogs.scrollTop = frontendLogs.scrollHeight;
-  } else {
-    backendLogs.value += `${line}\n`;
-    backendLogs.scrollTop = backendLogs.scrollHeight;
-  }
-}
-
 function showSettingsModal() {
   applySettingsToFormState();
   settingsModal.classList.remove('hidden');
@@ -440,23 +389,8 @@ function hideSettingsModal() {
   settingsModal.classList.add('hidden');
 }
 
-function showDeveloperModal() {
-  applySettingsToFormState();
-  developerModal.classList.remove('hidden');
-}
-
-function hideDeveloperModal() {
-  developerModal.classList.add('hidden');
-}
-
 function setupWindowControls() {
-  if (window.appApi.platform === 'darwin') {
-    document.body.classList.add('platform-darwin');
-  }
-
-  if (window.appApi.platform === 'win32' || window.appApi.platform === 'linux') {
-    document.getElementById('windowControls').style.display = 'flex';
-  }
+  document.body.classList.add(`platform-${window.appApi.platform}`);
 
   btnMin.addEventListener('click', () => window.appApi.windowControl.minimize());
   btnMax.addEventListener('click', () => window.appApi.windowControl.maximizeToggle());
@@ -526,9 +460,6 @@ async function bootstrap() {
   applyMeta(initial.meta);
   applySettingsToFormState();
 
-  frontendLogs.value = (initial.logs.frontend || []).join('\n');
-  backendLogs.value = (initial.logs.backend || []).join('\n');
-
   frontendRunning = !!initial.state.frontendRunning;
   backendRunning = !!initial.state.backendRunning;
   frontendStatus = initial.state.frontendStatus || 'stopped';
@@ -556,8 +487,6 @@ async function bootstrap() {
     void openServicePage(appMeta.urls.quickConsult);
   });
 
-  btnDeveloperMode.addEventListener('click', showDeveloperModal);
-
   lanAccessLink.addEventListener('click', (event) => {
     event.preventDefault();
     const url = lanAccessLink.dataset.url;
@@ -578,11 +507,6 @@ async function bootstrap() {
   closeSettings.addEventListener('click', hideSettingsModal);
   settingsModal.addEventListener('click', (event) => {
     if (event.target === settingsModal) hideSettingsModal();
-  });
-
-  closeDeveloperMode.addEventListener('click', hideDeveloperModal);
-  developerModal.addEventListener('click', (event) => {
-    if (event.target === developerModal) hideDeveloperModal();
   });
 
   selectOnnxFile.addEventListener('click', async () => {
@@ -618,26 +542,26 @@ async function bootstrap() {
     }
   });
 
-  saveDeveloperSettings.addEventListener('click', async () => {
+  openDeveloperMode.addEventListener('click', async () => {
+    await window.appApi.openDeveloperWindow();
+  });
+
+  resetDatabase.addEventListener('click', async () => {
+    const confirmed = window.confirm('重置数据库后会丢失所有数据，是否继续？');
+    if (!confirmed) return;
+
     try {
-      const result = await persistSettings(collectDeveloperForm());
+      const result = await window.appApi.resetDatabase();
+      frontendRunning = !!result.state.frontendRunning;
+      backendRunning = !!result.state.backendRunning;
+      frontendStatus = result.state.frontendStatus || 'stopped';
+      backendStatus = result.state.backendStatus || 'stopped';
+      syncErrorStateFromState(result.state);
       updateStartButtonStatus();
-      if (!result.ok) {
-        window.alert('开发者设置已保存，但当前服务状态存在错误，请查看设置界面的详细错误信息。');
-        return;
-      }
-      hideDeveloperModal();
+      window.alert('数据库已重置。');
     } catch (error) {
-      window.alert(`保存开发者设置失败：${error.message}`);
+      window.alert(`重置数据库失败：${error.message}`);
     }
-  });
-
-  btnBackendAdvanced.addEventListener('click', () => {
-    void openServicePage(appMeta.urls.developerAbout);
-  });
-
-  window.appApi.onCliLog(({ target, line }) => {
-    appendLogToView(target, line);
   });
 
   window.appApi.onCliState((state) => {

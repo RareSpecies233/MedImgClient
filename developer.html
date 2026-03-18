@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>开发者模式</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="developer-window-body">
+    <div class="app-shell developer-shell">
+      <header class="titlebar developer-titlebar">
+        <div class="window-controls" id="windowControls">
+          <button id="btnClose" class="window-control close" title="关闭" aria-label="关闭">
+            <span>×</span>
+          </button>
+          <button id="btnMin" class="window-control minimize" title="最小化" aria-label="最小化">
+            <span>−</span>
+          </button>
+          <button id="btnMax" class="window-control maximize" title="最大化" aria-label="最大化">
+            <span>+</span>
+          </button>
+        </div>
+        <div class="developer-title-text">开发者模式</div>
+        <div class="titlebar-spacer"></div>
+      </header>
+
+      <main class="developer-page">
+        <section class="developer-panel">
+          <div class="developer-hero">
+            <h1>开发者模式</h1>
+            <p>用于追加自定义参数、查看 CLI 输出，并打开后端高级设置页面。</p>
+          </div>
+
+          <div class="developer-grid">
+            <div class="setting-group">
+              <label>前端附加参数</label>
+              <textarea id="developerFrontendArgs" placeholder="会附加在 --port 和 --apiport 后面"></textarea>
+            </div>
+            <div class="setting-group">
+              <label>后端附加参数</label>
+              <textarea id="developerBackendArgs" placeholder="会附加在 --apiport、--onnx、--model_type 后面"></textarea>
+            </div>
+          </div>
+
+          <div class="logs-wrap developer-logs">
+            <div>
+              <h3>前端 CLI 输出</h3>
+              <textarea id="frontendLogs" readonly></textarea>
+            </div>
+            <div>
+              <h3>后端 CLI 输出</h3>
+              <textarea id="backendLogs" readonly></textarea>
+            </div>
+          </div>
+
+          <div class="developer-actions">
+            <button id="btnBackendAdvanced" class="secondary-action">后端高级设置</button>
+            <button id="saveDeveloperSettings">保存开发者设置</button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="developer.js"></script>
+  </body>
+  </html>

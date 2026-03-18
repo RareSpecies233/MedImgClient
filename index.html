@@ -9,13 +9,20 @@
   <body>
     <div class="app-shell">
       <header class="titlebar">
-        <div class="drag-region"></div>
-        <div class="tabs" id="tabsContainer"></div>
         <div class="window-controls" id="windowControls">
-          <button id="btnMin" title="最小化">—</button>
-          <button id="btnMax" title="最大化">▢</button>
-          <button id="btnClose" title="关闭">✕</button>
+          <button id="btnClose" class="window-control close" title="关闭" aria-label="关闭">
+            <span>×</span>
+          </button>
+          <button id="btnMin" class="window-control minimize" title="最小化" aria-label="最小化">
+            <span>−</span>
+          </button>
+          <button id="btnMax" class="window-control maximize" title="最大化" aria-label="最大化">
+            <span>+</span>
+          </button>
         </div>
+        <div class="titlebar-spacer"></div>
+        <div class="tabs" id="tabsContainer"></div>
+        <div class="titlebar-spacer"></div>
       </header>
 
       <main class="content" id="contentArea">
@@ -26,15 +33,9 @@
             <p id="cliStatusText">正在启动中...</p>
             <p class="home-link-text">
               局域网中可在浏览器中访问
-              <a href="#" id="lanAccessLink">暂未获取到局域网地址</a>
-              在线使用
+              <span class="lan-address-wrap">【<span id="lanAddressText">http://本机局ip:3000</span>】</span>
+              <a href="#" id="lanAccessLink">在线使用</a>
             </p>
-            <div class="home-meta">
-              <div class="home-meta-item">
-                <span>默认入口</span>
-                <strong id="defaultStartUrl">http://127.0.0.1:3000/client</strong>
-              </div>
-            </div>
             <div class="home-actions">
               <button id="btnStart" disabled>正在启动中</button>
               <button id="btnSettings">设置</button>
@@ -44,9 +45,6 @@
               <button id="btnQuickAnalysis" class="secondary-action">临时快速Ai分析</button>
               <button id="btnQuickReconstruction" class="secondary-action">临时快速三维重建</button>
               <button id="btnQuickConsult" class="secondary-action">临时快速Ai问诊</button>
-            </div>
-            <div class="home-footer-actions">
-              <button id="btnDeveloperMode" class="ghost-action">开发者模式</button>
             </div>
           </div>
         </section>
@@ -62,18 +60,6 @@
         </div>
 
         <div class="modal-body">
-          <div class="setting-group setting-group-full fixed-paths-panel">
-            <label>固定程序路径</label>
-            <div class="fixed-path-item">
-              <span>前端</span>
-              <code id="frontendFixedPath"></code>
-            </div>
-            <div class="fixed-path-item">
-              <span>后端</span>
-              <code id="backendFixedPath"></code>
-            </div>
-          </div>
-
           <div class="setting-group checkbox-group">
             <label>
               <input type="checkbox" id="enableFrontendService" />
@@ -140,55 +126,9 @@
         </div>
 
         <div class="modal-footer">
+          <button id="openDeveloperMode" class="ghost-action">开发者模式</button>
+          <button id="resetDatabase" class="secondary-action">重置数据库</button>
           <button id="saveSettings">保存设置</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="modal-backdrop hidden" id="developerModal">
-      <div class="modal developer-modal" role="dialog" aria-modal="true" aria-label="开发者模式">
-        <div class="modal-header">
-          <h2>开发者模式</h2>
-          <button id="closeDeveloperMode">✕</button>
-        </div>
-
-        <div class="modal-body developer-body">
-          <div class="setting-group setting-group-full fixed-paths-panel">
-            <label>固定程序路径</label>
-            <div class="fixed-path-item">
-              <span>前端</span>
-              <code id="developerFrontendFixedPath"></code>
-            </div>
-            <div class="fixed-path-item">
-              <span>后端</span>
-              <code id="developerBackendFixedPath"></code>
-            </div>
-          </div>
-
-          <div class="setting-group">
-            <label>前端附加参数</label>
-            <textarea id="developerFrontendArgs" placeholder="会附加在 --port 和 --apiport 后面"></textarea>
-          </div>
-          <div class="setting-group">
-            <label>后端附加参数</label>
-            <textarea id="developerBackendArgs" placeholder="会附加在 --apiport、--onnx、--model_type 后面"></textarea>
-          </div>
-
-          <div class="logs-wrap setting-group-full">
-            <div>
-              <h3>前端 CLI 输出</h3>
-              <textarea id="frontendLogs" readonly></textarea>
-            </div>
-            <div>
-              <h3>后端 CLI 输出</h3>
-              <textarea id="backendLogs" readonly></textarea>
-            </div>
-          </div>
-        </div>
-
-        <div class="modal-footer developer-footer">
-          <button id="btnBackendAdvanced" class="secondary-action">后端高级设置</button>
-          <button id="saveDeveloperSettings">保存开发者设置</button>
         </div>
       </div>
     </div>

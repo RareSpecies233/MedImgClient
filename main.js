@@ -1,7 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const os = require('os');
 const { spawn } = require('child_process');
 
 const MODEL_TYPES = ['no_prompt', 'pts', 'box', 'box+pts', 'sota'];
@@ -21,6 +20,7 @@ const DEFAULT_SETTINGS = {
 };
 
 let mainWindow = null;
+let developerWindow = null;
 let appShuttingDown = false;
 let quitSequenceStarted = false;
 
@@ -66,19 +66,6 @@ function getServiceBinaryPath(target) {
   return path.join(getProgramRoot(), 'bin', executableName);
 }
 
-function getLocalNetworkIp() {
-  const interfaces = os.networkInterfaces();
-  for (const addresses of Object.values(interfaces)) {
-    if (!Array.isArray(addresses)) continue;
-    for (const address of addresses) {
-      if (address && address.family === 'IPv4' && !address.internal) {
-        return address.address;
-      }
-    }
-  }
-  return '';
-}
-
 function buildClientUrl(port, host = '127.0.0.1', pathname = '/client') {
   return `http://${host}:${port}${pathname}`;
 }
@@ -96,6 +83,9 @@ function appendLog(target, message) {
   }
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('cli-log', { target, line });
+  }
+  if (developerWindow && !developerWindow.isDestroyed()) {
+    developerWindow.webContents.send('cli-log', { target, line });
   }
 }
 
@@ -189,28 +179,26 @@ function writeSettings(payload) {
 }
 
 function getMetaPayload(settings) {
-  const localNetworkIp = getLocalNetworkIp();
   return {
-    fixedPaths: {
-      frontend: getServiceBinaryPath('frontend'),
-      backend: getServiceBinaryPath('backend')
-    },
     urls: {
       start: buildClientUrl(settings.port, '127.0.0.1', '/client'),
       quickPreprocess: buildClientUrl(settings.port, 'localhost', '/client/temp/preprocess'),
       quickAnalysis: buildClientUrl(settings.port, 'localhost', '/client/temp/analysis'),
       quickReconstruction: buildClientUrl(settings.port, 'localhost', '/client/temp/reconstruction'),
       quickConsult: buildClientUrl(settings.port, 'localhost', '/client/temp/consult'),
-      developerAbout: buildClientUrl(settings.port, 'localhost', '/client/about'),
-      lan: localNetworkIp ? `http://${localNetworkIp}:${settings.port}` : ''
+      lanAccess: `http://localhost:${settings.port}`,
+      lanPlaceholder: `http://本机局ip:${settings.port}`
     },
-    localNetworkIp
+    platform: process.platform
   };
 }
 
 function notifyCliState() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('cli-state-updated', getCliStatePayload());
+  }
+  if (developerWindow && !developerWindow.isDestroyed()) {
+    developerWindow.webContents.send('cli-state-updated', getCliStatePayload());
   }
 }
 
@@ -596,17 +584,8 @@ function createMainWindow() {
     }
   };
 
-  if (process.platform === 'darwin') {
-    windowOptions.titleBarStyle = 'hiddenInset';
-  } else {
-    windowOptions.frame = false;
-    windowOptions.titleBarStyle = 'hidden';
-    windowOptions.titleBarOverlay = {
-      color: '#f6f7fb',
-      symbolColor: '#0f172a',
-      height: 38
-    };
-  }
+  windowOptions.frame = false;
+  windowOptions.titleBarStyle = 'hidden';
 
   mainWindow = new BrowserWindow(windowOptions);
   mainWindow.loadFile('index.html');
@@ -619,6 +598,55 @@ function createMainWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+}
+
+function createDeveloperWindow() {
+  if (developerWindow && !developerWindow.isDestroyed()) {
+    developerWindow.focus();
+    return developerWindow;
+  }
+
+  developerWindow = new BrowserWindow({
+    width: 980,
+    height: 760,
+    minWidth: 760,
+    minHeight: 560,
+    show: false,
+    frame: false,
+    backgroundColor: '#f6f7fb',
+    titleBarStyle: 'hidden',
+    parent: mainWindow || undefined,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+
+  developerWindow.loadFile('developer.html');
+  developerWindow.once('ready-to-show', () => {
+    developerWindow.show();
+  });
+  developerWindow.on('closed', () => {
+    developerWindow = null;
+  });
+
+  return developerWindow;
+}
+
+async function resetDatabase() {
+  const dbPath = path.join(getProgramRoot(), 'db');
+
+  await stopProcess('frontend', '重置数据库，停止前端服务');
+  await stopProcess('backend', '重置数据库，停止后端服务');
+
+  try {
+    await fs.promises.rm(dbPath, { recursive: true, force: true });
+  } catch (error) {
+    throw new Error(`删除数据库目录失败：${error.message}`);
+  }
+
+  notifyCliState();
 }
 
 async function bootstrapServicesOnStartup() {
@@ -738,6 +766,14 @@ ipcMain.handle('external:open', async (_event, url) => {
   return true;
 });
 
+ipcMain.handle('database:reset', async () => {
+  await resetDatabase();
+  return {
+    ok: true,
+    state: getCliStatePayload()
+  };
+});
+
 ipcMain.handle('window:minimize', () => {
   const win = BrowserWindow.getFocusedWindow();
   if (win) win.minimize();
@@ -756,4 +792,9 @@ ipcMain.handle('window:maximize-toggle', () => {
 ipcMain.handle('window:close', () => {
   const win = BrowserWindow.getFocusedWindow();
   if (win) win.close();
+});
+
+ipcMain.handle('window:open-developer', () => {
+  createDeveloperWindow();
+  return true;
 });
