@@ -571,6 +571,34 @@ function hideSettingsModal() {
 function setupWindowControls() {
   document.body.classList.add(`platform-${window.appApi.platform}`);
 
+  const syncWindowState = (state = {}) => {
+    btnMax.classList.toggle('maximized', !!state.maximized);
+    btnMax.title = state.maximized ? '还原' : '最大化';
+    btnMax.setAttribute('aria-label', state.maximized ? '还原' : '最大化');
+  };
+
+  if (window.appApi.platform === 'win32') {
+    tabsContainer.addEventListener('wheel', (event) => {
+      const overflow = tabsContainer.scrollHeight > tabsContainer.clientHeight + 1;
+      if (!overflow) return;
+
+      const dominantDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX)
+        ? event.deltaY
+        : event.deltaX;
+
+      if (dominantDelta === 0) return;
+
+      event.preventDefault();
+      tabsContainer.scrollBy({
+        top: dominantDelta,
+        behavior: 'smooth'
+      });
+    }, { passive: false });
+
+    void window.appApi.windowControl.getState().then(syncWindowState);
+    window.appApi.onWindowState(syncWindowState);
+  }
+
   btnMin.addEventListener('click', () => window.appApi.windowControl.minimize());
   btnMax.addEventListener('click', () => window.appApi.windowControl.maximizeToggle());
   btnClose.addEventListener('click', () => window.appApi.windowControl.close());

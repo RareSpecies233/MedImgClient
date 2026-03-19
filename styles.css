@@ -79,6 +79,8 @@ textarea {
   padding-right: 4px;
   scrollbar-gutter: stable;
   width: 100%;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
 }
 
 .tabs::-webkit-scrollbar {
@@ -241,20 +243,25 @@ body.platform-win32 .window-controls {
 
 body.platform-win32 .window-control {
   width: 46px;
-  height: auto;
+  height: 32px;
   min-width: 46px;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  color: #4b5563;
+  color: #334155;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-app-region: no-drag;
 }
 
-body.platform-win32 .window-control span {
-  opacity: 1;
-  color: inherit;
-  transform: none;
-  font-size: 11px;
-  letter-spacing: -0.04em;
+body.platform-win32 .window-control .window-icon {
+  position: relative;
+  display: block;
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
 }
 
 body.platform-win32 .window-control:hover {
@@ -266,22 +273,65 @@ body.platform-win32 .window-control.close:hover {
   background: #e81123;
 }
 
-body.platform-win32 .window-control.close:hover span {
+body.platform-win32 .window-control.close:hover {
   color: #ffffff;
 }
 
-body.platform-win32 .window-control.minimize span {
-  transform: translateY(-5px);
+body.platform-win32 .window-control:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.22);
 }
 
-body.platform-win32 .window-control.maximize span {
-  font-size: 10px;
+body.platform-win32 .window-control.minimize .window-icon::before {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 2px;
+  height: 1.5px;
+  background: currentColor;
+  border-radius: 999px;
 }
 
-body.platform-win32 .window-control.close,
-body.platform-win32 .window-control.minimize,
-body.platform-win32 .window-control.maximize {
-  background: transparent;
+body.platform-win32 .window-control.maximize .window-icon::before {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border: 1.5px solid currentColor;
+  border-radius: 0;
+}
+
+body.platform-win32 .window-control.maximize.maximized .window-icon::before {
+  inset: 3px 1px 1px 3px;
+}
+
+body.platform-win32 .window-control.maximize.maximized .window-icon::after {
+  content: '';
+  position: absolute;
+  inset: 1px 3px 3px 1px;
+  border: 1.5px solid currentColor;
+  background: var(--panel-solid);
+}
+
+body.platform-win32 .window-control.close .window-icon::before,
+body.platform-win32 .window-control.close .window-icon::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 13px;
+  height: 1.5px;
+  background: currentColor;
+  border-radius: 999px;
+  transform-origin: center;
+}
+
+body.platform-win32 .window-control.close .window-icon::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+body.platform-win32 .window-control.close .window-icon::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
 }
 
 .home-view,

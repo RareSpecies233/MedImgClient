@@ -23,6 +23,13 @@ let mainWindow = null;
 let appShuttingDown = false;
 let quitSequenceStarted = false;
 
+function sendWindowState(win) {
+  if (!win || win.isDestroyed()) return;
+  win.webContents.send('window:state-changed', {
+    maximized: win.isMaximized()
+  });
+}
+
 const processState = {
   frontend: {
     process: null,
@@ -596,7 +603,16 @@ function createMainWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    sendWindowState(mainWindow);
     notifyCliState();
+  });
+
+  mainWindow.on('maximize', () => {
+    sendWindowState(mainWindow);
+  });
+
+  mainWindow.on('unmaximize', () => {
+    sendWindowState(mainWindow);
   });
 
   mainWindow.on('closed', () => {
@@ -827,6 +843,13 @@ ipcMain.handle('window:minimize', () => {
   if (win) win.minimize();
 });
 
+ipcMain.handle('window:get-state', () => {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  return {
+    maximized: !!win && win.isMaximized()
+  };
+});
+
 ipcMain.handle('window:maximize-toggle', () => {
   const win = BrowserWindow.getFocusedWindow();
   if (!win) return;
@@ -835,6 +858,7 @@ ipcMain.handle('window:maximize-toggle', () => {
   } else {
     win.maximize();
   }
+  sendWindowState(win);
 });
 
 ipcMain.handle('window:close', () => {

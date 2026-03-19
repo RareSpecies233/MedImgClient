@@ -32,7 +32,15 @@ contextBridge.exposeInMainWorld('appApi', {
     ipcRenderer.on('cli-state-updated', wrapped);
     return () => ipcRenderer.removeListener('cli-state-updated', wrapped);
   },
+  onWindowState(listener) {
+    const wrapped = (_event, payload) => listener(payload);
+    ipcRenderer.on('window:state-changed', wrapped);
+    return () => ipcRenderer.removeListener('window:state-changed', wrapped);
+  },
   windowControl: {
+    getState() {
+      return ipcRenderer.invoke('window:get-state');
+    },
     minimize() {
       return ipcRenderer.invoke('window:minimize');
     },
