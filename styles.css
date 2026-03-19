@@ -264,6 +264,13 @@ body.platform-win32 .window-control .window-icon {
   pointer-events: none;
 }
 
+/* Windows 平台：窗口控制按钮始终可见 */
+body.platform-win32 .window-control .window-icon,
+body.platform-win32 .window-control span {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
 body.platform-win32 .window-control:hover {
   background: #e5e7eb;
   box-shadow: none;
