@@ -634,6 +634,31 @@ async function bootstrap() {
   switchTab('home');
   setupWindowControls();
 
+  // 保证主标题始终在一行并根据容器宽度自动缩小字体
+  function autoShrinkTitle() {
+    const el = document.getElementById('appTitle');
+    if (!el) return;
+    const computed = window.getComputedStyle(el);
+    const maxSize = 36; // 与 CSS clamp 的最大值一致
+    const minSize = 12;
+    // 从当前样式或 maxSize 开始
+    let fontSize = Math.min(maxSize, parseFloat(computed.fontSize) || maxSize);
+    el.style.whiteSpace = 'nowrap';
+    el.style.overflow = 'hidden';
+    el.style.textOverflow = 'ellipsis';
+    el.style.display = 'block';
+
+    // 逐像素缩小直到标题宽度不超出容器或达到最小字体
+    while (fontSize > minSize && el.scrollWidth > el.clientWidth) {
+      fontSize -= 1;
+      el.style.fontSize = `${fontSize}px`;
+    }
+  }
+
+  window.addEventListener('resize', () => {
+    autoShrinkTitle();
+  });
+
   const initial = await window.appApi.getSettings();
   settings = initial.settings;
   applyMeta(initial.meta);
@@ -648,6 +673,7 @@ async function bootstrap() {
   syncErrorStateFromState(initial.state);
   updateServiceRuntimeControls();
   updateStartButtonStatus();
+  autoShrinkTitle();
 
   btnStart.addEventListener('click', () => {
     void openServicePage(appMeta.urls.start);

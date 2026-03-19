@@ -58,6 +58,10 @@ function getProgramRoot() {
   return app.isPackaged ? path.dirname(app.getPath('exe')) : __dirname;
 }
 
+function getServiceWorkingDirectory() {
+  return getProgramRoot();
+}
+
 function getServiceBinaryPath(target) {
   const executableName = process.platform === 'win32'
     ? target === 'frontend' ? 'ui.exe' : 'server.exe'
@@ -368,6 +372,7 @@ function stopProcess(target, reason = '收到停止指令') {
 async function spawnCli(target, cliPath, args, enableGuard) {
   const state = processState[target];
   const commandKey = makeCommandKey(cliPath, args);
+  const workingDirectory = getServiceWorkingDirectory();
 
   if (state.process && state.running && state.commandKey === commandKey) {
     appendLog(target, '进程已在运行，跳过重复启动。');
@@ -383,8 +388,10 @@ async function spawnCli(target, cliPath, args, enableGuard) {
   clearServiceError(target);
   notifyCliState();
   appendLog(target, `启动命令：${formatCommand(cliPath, args)}`);
+  appendLog(target, `工作目录：${workingDirectory}`);
 
   const child = spawn(cliPath, args, {
+    cwd: workingDirectory,
     stdio: ['ignore', 'pipe', 'pipe'],
     shell: false
   });

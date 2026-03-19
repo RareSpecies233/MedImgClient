@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MedImg Client</title>
+    <title>基于微调U-SAM模型的直肠癌分割系统</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -12,14 +12,14 @@
         <div class="titlebar-leading-space"></div>
         <div class="tabs" id="tabsContainer"></div>
         <div class="window-controls" id="windowControls">
-          <button id="btnClose" class="window-control close" title="关闭" aria-label="关闭">
-            <span>×</span>
-          </button>
           <button id="btnMin" class="window-control minimize" title="最小化" aria-label="最小化">
-            <span>−</span>
+            <span>-</span>
           </button>
           <button id="btnMax" class="window-control maximize" title="最大化" aria-label="最大化">
-            <span>+</span>
+            <span>[]</span>
+          </button>
+          <button id="btnClose" class="window-control close" title="关闭" aria-label="关闭">
+            <span>x</span>
           </button>
         </div>
       </header>
@@ -27,8 +27,8 @@
       <main class="content" id="contentArea">
         <section class="home-view" id="homeView">
           <div class="home-card">
-            <div class="home-badge">MedImg Client</div>
-            <h1>欢迎使用</h1>
+            <div class="home-badge">欢迎使用</div>
+            <h1 id="appTitle">基于微调U-SAM模型的直肠癌分割系统</h1>
             <p id="cliStatusText">正在启动中...</p>
             <p class="home-link-text hidden" id="homeLanHint">
               局域网中可在浏览器中访问

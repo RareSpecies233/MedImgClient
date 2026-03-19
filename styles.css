@@ -55,7 +55,7 @@ textarea {
   background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(14px);
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: start;
   padding: 8px 14px 6px;
   column-gap: 10px;
@@ -73,8 +73,25 @@ textarea {
   align-content: flex-start;
   flex-wrap: wrap;
   gap: 4px;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: calc(26px * 3 + 4px * 2);
+  padding-right: 4px;
+  scrollbar-gutter: stable;
   width: 100%;
+}
+
+.tabs::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tabs::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tabs::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.45);
+  border-radius: 999px;
 }
 
 .tab-item,
@@ -96,6 +113,12 @@ textarea {
   line-height: 1;
   flex: 0 0 auto;
   -webkit-app-region: no-drag;
+}
+
+.tab-item span:first-child {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tab-item.active {
@@ -205,6 +228,62 @@ body.platform-darwin .titlebar {
   padding-left: 8px;
 }
 
+body.platform-win32 .titlebar-leading-space {
+  display: none;
+}
+
+body.platform-win32 .window-controls {
+  gap: 0;
+  min-width: auto;
+  align-self: stretch;
+  margin: -8px -14px -6px 0;
+}
+
+body.platform-win32 .window-control {
+  width: 46px;
+  height: auto;
+  min-width: 46px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #4b5563;
+}
+
+body.platform-win32 .window-control span {
+  opacity: 1;
+  color: inherit;
+  transform: none;
+  font-size: 11px;
+  letter-spacing: -0.04em;
+}
+
+body.platform-win32 .window-control:hover {
+  background: #e5e7eb;
+  box-shadow: none;
+}
+
+body.platform-win32 .window-control.close:hover {
+  background: #e81123;
+}
+
+body.platform-win32 .window-control.close:hover span {
+  color: #ffffff;
+}
+
+body.platform-win32 .window-control.minimize span {
+  transform: translateY(-5px);
+}
+
+body.platform-win32 .window-control.maximize span {
+  font-size: 10px;
+}
+
+body.platform-win32 .window-control.close,
+body.platform-win32 .window-control.minimize,
+body.platform-win32 .window-control.maximize {
+  background: transparent;
+}
+
 .home-view,
 .tab-pages,
 .tab-page {
@@ -245,6 +324,18 @@ body.platform-darwin .titlebar {
 .home-card h1 {
   margin: 0;
   font-size: clamp(32px, 4vw, 46px);
+}
+
+/* 标题始终在一行显示，允许字体自动缩小以适应宽度 */
+#appTitle {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  line-height: 1;
+  font-weight: 600;
+  font-size: clamp(20px, 3.5vw, 36px);
+  -webkit-font-smoothing: antialiased;
 }
 
 .home-card p {
