@@ -568,6 +568,47 @@ function hideSettingsModal() {
   settingsModal.classList.add('hidden');
 }
 
+function syncWindowsChromeMetrics() {
+  if (window.appApi.platform !== 'win32') {
+    return;
+  }
+
+  const dpr = Math.max(window.devicePixelRatio || 1, 1);
+  const rootStyle = document.documentElement.style;
+
+  let controlWidth = 46;
+  let controlHeight = 32;
+  let iconSize = 12;
+  let strokeWidth = 1.5;
+  let controlsGap = 12;
+
+  if (dpr >= 2) {
+    controlWidth = 36;
+    controlHeight = 28;
+    iconSize = 10;
+    strokeWidth = 1.25;
+    controlsGap = 10;
+  } else if (dpr >= 1.5) {
+    controlWidth = 40;
+    controlHeight = 30;
+    iconSize = 11;
+    strokeWidth = 1.25;
+    controlsGap = 10;
+  } else if (dpr >= 1.25) {
+    controlWidth = 42;
+    controlHeight = 31;
+    iconSize = 11;
+    strokeWidth = 1.25;
+    controlsGap = 11;
+  }
+
+  rootStyle.setProperty('--win-window-control-width', `${controlWidth}px`);
+  rootStyle.setProperty('--win-window-control-height', `${controlHeight}px`);
+  rootStyle.setProperty('--win-window-control-icon-size', `${iconSize}px`);
+  rootStyle.setProperty('--win-window-control-stroke', `${strokeWidth}px`);
+  rootStyle.setProperty('--win-window-controls-gap', `${controlsGap}px`);
+}
+
 function setupWindowControls() {
   document.body.classList.add(`platform-${window.appApi.platform}`);
 
@@ -578,6 +619,8 @@ function setupWindowControls() {
   };
 
   if (window.appApi.platform === 'win32') {
+    syncWindowsChromeMetrics();
+
     tabsContainer.addEventListener('wheel', (event) => {
       const overflow = tabsContainer.scrollHeight > tabsContainer.clientHeight + 1;
       if (!overflow) return;
@@ -594,6 +637,8 @@ function setupWindowControls() {
         behavior: 'smooth'
       });
     }, { passive: false });
+
+    window.addEventListener('resize', syncWindowsChromeMetrics);
 
     void window.appApi.windowControl.getState().then(syncWindowState);
     window.appApi.onWindowState(syncWindowState);
