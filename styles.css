@@ -432,13 +432,12 @@ body.platform-win32 .tabs {
 }
 
 .home-actions,
-.quick-actions,
 .developer-actions {
   width: 100%;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   gap: 12px;
-  flex-wrap: wrap;
+  align-items: center;
 }
 
 button {
@@ -488,6 +487,20 @@ button:hover {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
+}
+
+.modular-actions {
+  grid-column: span 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.home-actions button,
+.modular-actions button {
+  width: 100%;
+  max-width: 320px;
 }
 
 .tab-pages {

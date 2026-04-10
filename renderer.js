@@ -2,12 +2,16 @@ const tabsContainer = document.getElementById('tabsContainer');
 const tabPages = document.getElementById('tabPages');
 const homeView = document.getElementById('homeView');
 
-const btnStart = document.getElementById('btnStart');
+const btnFullFlow = document.getElementById('btnFullFlow');
+const btnModularFlow = document.getElementById('btnModularFlow');
 const btnSettings = document.getElementById('btnSettings');
 const btnQuickPreprocess = document.getElementById('btnQuickPreprocess');
 const btnQuickAnalysis = document.getElementById('btnQuickAnalysis');
 const btnQuickReconstruction = document.getElementById('btnQuickReconstruction');
 const btnQuickConsult = document.getElementById('btnQuickConsult');
+const modularModal = document.getElementById('modularModal');
+const closeModularModal = document.getElementById('closeModularModal');
+const modularCancel = document.getElementById('modularCancel');
 const cliStatusText = document.getElementById('cliStatusText');
 const homeLanHint = document.getElementById('homeLanHint');
 const lanAccessLink = document.getElementById('lanAccessLink');
@@ -341,8 +345,7 @@ function areRequiredServicesReady() {
 
 function updateStartButtonStatus() {
   const ready = areRequiredServicesReady();
-  btnStart.disabled = manualStartInProgress;
-  btnStart.textContent = manualStartInProgress ? '正在启动中' : ready ? '开始使用' : '未启动服务';
+  btnFullFlow.disabled = manualStartInProgress;
   cliStatusText.textContent = getServiceStatusText();
   updateHomeLanHint();
 }
@@ -748,24 +751,45 @@ async function bootstrap() {
   updateStartButtonStatus();
   autoShrinkTitle();
 
-  btnStart.addEventListener('click', () => {
+  btnFullFlow.addEventListener('click', () => {
     void openServicePage(appMeta.urls.start);
+  });
+
+  // 分模块弹窗触发与弹窗内操作
+  btnModularFlow.addEventListener('click', () => {
+    if (modularModal) modularModal.classList.remove('hidden');
+  });
+
+  if (closeModularModal) closeModularModal.addEventListener('click', () => {
+    if (modularModal) modularModal.classList.add('hidden');
+  });
+
+  if (modularCancel) modularCancel.addEventListener('click', () => {
+    if (modularModal) modularModal.classList.add('hidden');
+  });
+
+  if (modularModal) modularModal.addEventListener('click', (event) => {
+    if (event.target === modularModal) modularModal.classList.add('hidden');
   });
 
   btnQuickPreprocess.addEventListener('click', () => {
     void openServicePage(appMeta.urls.quickPreprocess);
+    if (modularModal) modularModal.classList.add('hidden');
   });
 
   btnQuickAnalysis.addEventListener('click', () => {
     void openServicePage(appMeta.urls.quickAnalysis);
+    if (modularModal) modularModal.classList.add('hidden');
   });
 
   btnQuickReconstruction.addEventListener('click', () => {
     void openServicePage(appMeta.urls.quickReconstruction);
+    if (modularModal) modularModal.classList.add('hidden');
   });
 
   btnQuickConsult.addEventListener('click', () => {
     void openServicePage(appMeta.urls.quickConsult);
+    if (modularModal) modularModal.classList.add('hidden');
   });
 
   lanAccessLink.addEventListener('click', (event) => {

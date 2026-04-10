@@ -36,14 +36,9 @@
               <a href="#" id="lanAccessLink">在线使用</a>
             </p>
             <div class="home-actions">
-              <button id="btnStart" disabled>正在启动中</button>
+              <button id="btnFullFlow" class="primary-action">一键化全流程操作</button>
+              <button id="btnModularFlow" class="secondary-action">分模块流程操作</button>
               <button id="btnSettings">设置</button>
-            </div>
-            <div class="quick-actions">
-              <button id="btnQuickPreprocess" class="secondary-action">临时快速预处理</button>
-              <button id="btnQuickAnalysis" class="secondary-action">临时快速Ai分析</button>
-              <button id="btnQuickReconstruction" class="secondary-action">临时快速三维重建</button>
-              <button id="btnQuickConsult" class="secondary-action">临时快速Ai问诊</button>
             </div>
           </div>
         </section>
@@ -135,6 +130,28 @@
           <button id="openDeveloperMode" class="ghost-action">开发者模式</button>
           <button id="resetDatabase" class="secondary-action">重置数据库</button>
           <button id="saveSettings">保存设置</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop hidden" id="modularModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-label="分模块流程操作">
+        <div class="modal-header">
+          <h2>分模块流程操作</h2>
+          <button id="closeModularModal">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="modular-actions">
+            <button id="btnQuickPreprocess" class="secondary-action">分模块预处理</button>
+            <button id="btnQuickAnalysis" class="secondary-action">分模块Ai分析</button>
+            <button id="btnQuickReconstruction" class="secondary-action">分模块三维重建</button>
+            <button id="btnQuickConsult" class="secondary-action">分模块Ai问诊</button>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button id="modularCancel" class="ghost-action">取消</button>
         </div>
       </div>
     </div>
