@@ -261,7 +261,10 @@ function getServiceLaunchConfig(target, settings) {
       '--onnx',
       settings.onnxPath,
       '--model_type',
-      settings.modelType,
+      // 某些后端仅识别旧的标识符 "sota"，当 UI 选择显示为 "SCF-SAM" 时映射回 "sota"
+      (typeof settings.modelType === 'string' && settings.modelType.toLowerCase() === 'scf-sam')
+        ? 'sota'
+        : settings.modelType,
       ...parseArgs(settings.backendExtraArgs)
     ]
   };
