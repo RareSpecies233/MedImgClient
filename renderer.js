@@ -48,7 +48,7 @@ let settings = {
   port: 3000,
   apiPort: 3001,
   onnxPath: '',
-  modelType: 'sota',
+  modelType: 'SCF-SAM',
   frontendExtraArgs: '',
   backendExtraArgs: ''
 };
@@ -118,7 +118,7 @@ function applySettingsToFormState() {
   guardRestartDelaySeconds.value = String(settings.guardRestartDelaySeconds ?? 2);
   servicePort.value = String(settings.port ?? 3000);
   apiPort.value = String(settings.apiPort ?? 3001);
-  modelType.value = settings.modelType || 'sota';
+  modelType.value = settings.modelType || 'SCF-SAM';
   onnxPath.value = settings.onnxPath || '';
 }
 

@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
-const MODEL_TYPES = ['no_prompt', 'pts', 'box', 'box+pts', 'sota'];
+const MODEL_TYPES = ['no_prompt', 'pts', 'box', 'box+pts', 'SCF-SAM'];
 
 const DEFAULT_SETTINGS = {
   enableFrontendService: true,
@@ -14,7 +14,7 @@ const DEFAULT_SETTINGS = {
   port: 3000,
   apiPort: 3001,
   onnxPath: '',
-  modelType: 'sota',
+  modelType: 'SCF-SAM',
   frontendExtraArgs: '',
   backendExtraArgs: ''
 };
